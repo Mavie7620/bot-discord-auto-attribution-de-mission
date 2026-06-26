@@ -4,6 +4,7 @@ import random
 import os
 from threading import Thread
 from flask import Flask
+from datetime import datetime, timedelta
 
 # --- MINI SERVEUR WEB POUR METTRE LE BOT H24 ---
 app = Flask('')
@@ -50,12 +51,23 @@ def sauvegarder_mission_fichier(categorie, texte, delai):
     with open(FILE_NAME, "a", encoding="utf-8") as f:
         f.write(f"{categorie}|{texte}|{delai}\n")
 
+def extraire_jours(delai_texte):
+    mots = delai_texte.lower().split()
+    for i, mot in enumerate(mots):
+        if "jour" in mot or "day" in mot:
+            try: return int(mots[i-1])
+            except (ValueError, IndexError): return 1
+        if "heure" in mot or "hour" in mot:
+            try: return int(mots[i-1]) / 24.0
+            except (ValueError, IndexError): return 0.1
+    return 3
+
 missions_dispo = charger_missions_fichier()
-missions_actives = {}
+missions_actives = {}  # {joueur_id: {"texte": ..., "date_fin": ..., "cat": ..., "alerte_2h": False}}
 
 @bot.event
 async def on_ready():
-    print(f"Le Bot MADAmission H24 Pro est en ligne ! : {bot.user}")
+    print(f"Le Bot MADAmission Pro avec alertes de temps est en ligne !")
 
 @bot.event
 async def on_message(message):
@@ -66,123 +78,101 @@ async def on_message(message):
     content = message.content.strip()
     content_lower = content.lower()
 
-    # 1. COMMANDE COMMUNE : !aide ou !help (NOUVEAU !)
+    # --- SÉCURITÉ & VÉRIFICATION DU TEMPS (ALERTES ET RETARDS) ---
+    maintenant = datetime.now()
+    joueurs_en_retard = []
+    
+    for j_id, m_info in list(missions_actives.items()):
+        membre = message.guild.get_member(j_id)
+        mention_membre = membre.mention if membre else f"<@{j_id}>"
+        
+        # 1. Alerte retard (le temps est dépassé)
+        if maintenant > m_info["date_fin"]:
+            joueurs_en_retard.append(j_id)
+            await message.channel.send(f"🚨 **ALERTE RETARD** 🚨\nLe temps est écoulé ! La mission de {mention_membre} n'a pas été finie à temps ! Le Roi est déçu. 👑")
+            
+        # 2. Alerte temps restant (moins de 2 heures restantes et pas encore alerté)
+        elif m_info["date_fin"] - maintenant <= timedelta(hours=2) and not m_info["alerte_2h"]:
+            m_info["alerte_2h"] = True # On marque l'alerte comme envoyée
+            await message.channel.send(f"⏳ **SABLIER PRESQUE VIDE** ⏳\nSoldat {mention_membre}, il vous reste **moins de 2 heures** pour accomplir votre mission : *\"{m_info['texte']}\"* ! Dépêchez-vous !")
+
+    for j_id in joueurs_en_retard:
+        if j_id in missions_actives:
+            del missions_actives[j_id]
+
+    # 1. COMMANDE COMMUNE : !aide
     if content_lower in ["!aide", "!help"]:
         embed = discord.Embed(
             title="⚜️ TABLEAU DES ORDRES - MADAMISSION ⚜️",
-            description="Voici la liste des commandes disponibles pour interagir avec le Royaume.",
+            description="Voici la liste des commandes du Royaume.",
             color=discord.Color.gold()
         )
-        
-        # Section Citoyens
         embed.add_field(
-            name="👥 COMMANDES CITOYENS",
+            name="👥 COMMANDES SOLDAT",
             value=(
                 "**`!mission <difficulté>`**\n"
-                "Demander un ordre aléatoire (Choix : `commune`, `moyenne`, `difficile`, `royal`).\n"
-                "*Exemple : `!mission commune`*\n\n"
-                "**`!rendre`**\n"
-                "Valider/rendre votre mission en cours pour pouvoir en prendre une autre."
+                "Demander un ordre (Choix : `commune`, `moyenne`, `difficile`, `royal`).\n"
+                "*RP : Pour signaler la fin, faites simplement : `@instructeur j'ai finit ma mission`*"
             ),
             inline=False
         )
-        
-        # Section Admins
         if message.author.guild_permissions.administrator:
             embed.add_field(
-                name="👑 COMMANDES ADMINISTRATEUR",
+                name="👑 COMMANDES INSTRUCTEUR (ADMIN)",
                 value=(
-                    "**`!listemissions`**\n"
-                    "Afficher la liste complète de toutes les missions enregistrées.\n\n"
-                    "**`!addmission <difficulté> <mission> pendant <délai>`**\n"
-                    "Ajouter un nouvel ordre au Royaume.\n"
-                    "*Exemple : `!addmission commune Miner 64 fer pendant 1 jour`*\n\n"
-                    "**`!delmission <difficulté> <numéro>`**\n"
-                    "Supprimer une mission spécifique grâce à son numéro.\n"
-                    "*Exemple : `!delmission commune 2`*"
+                    "**`!missionfinit @joueur`**\n"
+                    "Valider officiellement la mission d'un soldat.\n\n"
+                    "**`!listemissions`** | **`!addmission`** | **`!delmission`**"
                 ),
                 inline=False
             )
-            
-        embed.set_footer(text="Que la gloire du Royaume vous accompagne.")
         await message.channel.send(embed=embed)
         return
 
-    # 2. COMMANDE ADMIN : !listemissions
+    # 2. COMMANDE INSTRUCTEUR : !missionfinit @joueur
+    if content_lower.startswith("!missionfinit"):
+        if not message.author.guild_permissions.administrator:
+            await message.channel.send("❌ Seuls les instructeurs (administrateurs) peuvent valider les missions.")
+            return
+        if not message.mentions:
+            await message.channel.send("❌ Tu dois mentionner le soldat (ex: `!missionfinit @Mavie7620`).")
+            return
+        cible = message.mentions[0]
+        if cible.id in missions_actives:
+            del missions_actives[cible.id]
+            await message.channel.send(f"✅ **L'instructeur {message.author.mention} a vérifié et validé !** La mission de {cible.mention} est officiellement accomplie. Gloire au Royaume ! ⚜️")
+        else:
+            await message.channel.send(f"❌ {cible.mention} n'a aucune mission active en ce moment.")
+        return
+
+    # 3. COMMANDE ADMIN : !listemissions
     if content_lower.startswith("!listemissions"):
         if not message.author.guild_permissions.administrator:
-            await message.channel.send("❌ Seuls les administrateurs peuvent voir la liste complète.")
+            await message.channel.send("❌ Seuls les administrateurs peuvent voir la liste.")
             return
         missions_dispo = charger_missions_fichier()
-        reponse = "⚜️ **LISTE DES MISSIONS DU ROYAUME DE MADAGASCAR** ⚜️\n\n"
+        reponse = "⚜️ **LISTE DES MISSIONS DU ROYAUME** ⚜️\n\n"
         emojis = {"commune": "🟢", "moyenne": "🔵", "difficile": "🟠", "royal": "👑"}
-        titres = {"commune": "COMMUNES", "moyenne": "MOYENNES", "difficile": "DIFFICILES", "royal": "ROYALES"}
-        total_missions = 0
         for cat in ["commune", "moyenne", "difficile", "royal"]:
-            reponse += f"{emojis[cat]} __**Missions {titres[cat]} :**__\n"
+            reponse += f"{emojis[cat]} __**Missions {cat.upper()} :**__\n"
             if not missions_dispo[cat]:
-                reponse += "*Aucune mission enregistrée dans cette catégorie.*\n"
+                reponse += "*Aucune mission.*\n"
             else:
                 for i, m in enumerate(missions_dispo[cat], start=1):
                     reponse += f"**{i}.** {m['texte']} *(Délai : {m['delai']})*\n"
-                    total_missions += 1
             reponse += "\n"
-        reponse += f"📊 *Total : {total_missions} mission(s) disponible(s).*js"
-        if len(reponse) > 2000:
-            await message.channel.send("⚠️ Liste trop longue, consultez le fichier texte.")
-        else:
-            await message.channel.send(reponse)
+        await message.channel.send(reponse)
         return
 
-    # 3. COMMANDE ADMIN : !addmission
+    # 4. COMMANDE ADMIN : !addmission
     if content_lower.startswith("!addmission"):
-        if not message.author.guild_permissions.administrator:
-            await message.channel.send("❌ Seuls les administrateurs peuvent ajouter des missions.")
-            return
-        
+        if not message.author.guild_permissions.administrator: return
         texte_total = content[11:].strip()
         mots = texte_total.split()
-        
         if len(mots) < 4 or "pendant" not in texte_total.lower():
-            await message.channel.send("❌ Mauvais format ! Exemple : `!addmission commune Miner fer pendant 1 jour`")
+            await message.channel.send("❌ Exemple : `!addmission commune Miner fer pendant 1 jour`")
             return
-            
         cat = mots[0].lower()
-        if cat in ["commune", "commun"]: cat = "commune"
-        elif cat in ["moyenne", "moyen"]: cat = "moyenne"
-        elif cat in ["difficile"]: cat = "difficile"
-        elif cat in ["royal", "royale"]: cat = "royal"
-        else:
-            await message.channel.send("❌ Catégorie invalide. Choix : `commune`, `moyenne`, `difficile`, `royal`.")
-            return
-
-        parties = texte_total.split(None, 1)[1].strip()
-        index_pendant = parties.lower().rfind("pendant")
-        
-        texte_mission = parties[:index_pendant].strip()
-        delai = parties[index_pendant + 7:].strip()
-        
-        if not texte_mission or not delai:
-            await message.channel.send("❌ Erreur de format. Écris la mission, puis le mot `pendant`, puis le délai.")
-            return
-
-        sauvegarder_mission_fichier(cat, texte_mission, delai)
-        missions_dispo = charger_missions_fichier()
-        await message.channel.send(f"⚜️ **Mission ajoutée !**\nCatégorie : `{cat}`\nMission : *{texte_mission}*\nDélai : *{delai}*")
-        return
-
-    # 4. COMMANDE ADMIN : !delmission
-    if content_lower.startswith("!delmission"):
-        if not message.author.guild_permissions.administrator:
-            await message.channel.send("❌ Seuls les administrateurs peuvent supprimer des missions.")
-            return
-        
-        mots = content_lower.split()
-        if len(mots) < 3:
-            await message.channel.send("❌ Mauvais format ! Exemple : `!delmission commune 2`")
-            return
-            
-        cat = mots[1]
         if cat in ["commune", "commun"]: cat = "commune"
         elif cat in ["moyenne", "moyen"]: cat = "moyenne"
         elif cat in ["difficile"]: cat = "difficile"
@@ -190,29 +180,40 @@ async def on_message(message):
         else:
             await message.channel.send("❌ Catégorie invalide.")
             return
-            
-        try:
-            numero = int(mots[2]) - 1
-        except ValueError:
-            await message.channel.send("❌ Le numéro doit être un chiffre valide.")
-            return
-            
+        parties = texte_total.split(None, 1)[1].strip()
+        index_pendant = parties.lower().rfind("pendant")
+        texte_mission = parties[:index_pendant].strip()
+        delai = parties[index_pendant + 7:].strip()
+        sauvegarder_mission_fichier(cat, texte_mission, delai)
         missions_dispo = charger_missions_fichier()
-        if numero < 0 or numero >= len(missions_dispo[cat]):
-            await message.channel.send(f"❌ Numéro invalide. Pas de mission n°{numero+1} dans `{cat}`.")
-            return
-            
-        mission_supprimee = missions_dispo[cat].pop(numero)
-        réécrire_toutes_missions(missions_dispo)
-        await message.channel.send(f"🗑️ **Mission retirée !**\n*\"{mission_supprimee['texte']}\"* a été supprimée de la catégorie `{cat}`.")
+        await message.channel.send(f"⚜️ **Mission ajoutée !** (`{cat}` : *{texte_mission}*)")
         return
 
-    # 5. COMMANDE CITOYENS : !mission
+    # 5. COMMANDE ADMIN : !delmission
+    if content_lower.startswith("!delmission"):
+        if not message.author.guild_permissions.administrator: return
+        mots = content_lower.split()
+        if len(mots) < 3: return
+        cat = mots[1]
+        if cat in ["commune", "commun"]: cat = "commune"
+        elif cat in ["moyenne", "moyen"]: cat = "moyenne"
+        elif cat in ["difficile"]: cat = "difficile"
+        elif cat in ["royal", "royale"]: cat = "royal"
+        try: numero = int(mots[2]) - 1
+        except ValueError: return
+        missions_dispo = charger_missions_fichier()
+        if numero >= 0 and numero < len(missions_dispo[cat]):
+            missions_dispo[cat].pop(numero)
+            réécrire_toutes_missions(missions_dispo)
+            await message.channel.send("🗑️ Mission retirée.")
+        return
+
+    # 6. COMMANDE SOLDAT : !mission <difficulté>
     if content_lower.startswith("!mission"):
         joueur = message.author
         mots = content_lower.split()
         if len(mots) < 2:
-            await message.channel.send(f"❌ {joueur.mention}, précise la difficulté.")
+            await message.channel.send(f"❌ Précise la difficulté (commune, moyenne, difficile, royal).")
             return
         cat = mots[1]
         if cat in ["commune", "commun"]: cat = "commune"
@@ -222,28 +223,31 @@ async def on_message(message):
         else:
             await message.channel.send("❌ Difficulté inconnue.")
             return
+
         if joueur.id in missions_actives:
-            await message.channel.send(f"❌ {joueur.mention}, tu as déjà une mission active !")
+            await message.channel.send(f"❌ Soldat {joueur.mention}, tu as déjà une mission en cours !")
             return
+
         if not missions_dispo[cat]:
             await message.channel.send(f"⚪ Aucune mission de type **{cat}** disponible.")
             return
+
         mission_choisie = random.choice(missions_dispo[cat])
-        missions_actives[joueur.id] = mission_choisie["texte"]
-        reponse = f"**Archi-Duc** {joueur.mention}, **Voici votre mission {cat} :**\n• *{mission_choisie['texte']}*\n• *Délai : {mission_choisie['delai']}*"
-        await message.channel.send(reponse)
+        
+        jours_delai = extraire_jours(mission_choisie["delai"])
+        date_limite = datetime.now() + timedelta(days=jours_delai)
+
+        missions_actives[joueur.id] = {
+            "texte": mission_choisie["texte"],
+            "date_fin": date_limite,
+            "cat": cat,
+            "alerte_2h": False  # Initialisé à False pour pouvoir déclencher l'alerte plus tard
+        }
+
+        await message.channel.send(f"Votre mission est la suivante : *\"{mission_choisie['texte']}\"* (Délai : {mission_choisie['delai']})")
         return
 
-    # 6. COMMANDE CITOYENS : !rendre
-    if content_lower == "!rendre":
-        joueur = message.author
-        if joueur.id in missions_actives:
-            del missions_actives[joueur.id]
-            await message.channel.send(f"✅ **Archi-Duc** {joueur.mention}, mission rendue !")
-        else:
-            await message.channel.send(f"❌ Tu n'as pas de mission en cours.")
-
-# Configuration et lancement
+# Lancement
 keep_alive()
 token = os.environ.get("DISCORD_TOKEN", "TON_TOKEN_ICI")
 bot.run(token)
