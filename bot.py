@@ -98,25 +98,38 @@ async def on_message(message):
     if content_lower in ["!aide", "!help"]:
         embed = discord.Embed(
             title="⚜️ TABLEAU DES ORDRES - MADAMISSION ⚜️",
-            description="Voici la liste des commandes du Royaume.",
+            description="Voici la liste détaillée des décrets et commandes du Royaume.",
             color=discord.Color.gold()
         )
         embed.add_field(
             name="👥 COMMANDES SOLDAT",
             value=(
                 "**`!mission <difficulté>`**\n"
-                "Demander un ordre (Choix : `commune`, `moyenne`, `difficile`, `royal`).\n"
-                "*RP : Pour signaler la fin, faites simplement : `@instructeur j'ai finit ma mission`*"
+                "Permet de recevoir un ordre aléatoire assigné par le Royaume selon la difficulté choisie.\n"
+                "*Choix : `commune`, `moyenne`, `difficile`, `royal`*\n"
+                "*Exemple : `!mission difficile`*\n\n"
+                "**Signaler une fin de mission :**\n"
+                "Une fois votre devoir accompli, interpellez directement vos supérieurs dans le salon :\n"
+                "`@instructeur j'ai finit ma mission`"
             ),
             inline=False
         )
         if message.author.guild_permissions.administrator:
             embed.add_field(
-                name="👑 COMMANDES INSTRUCTEUR (ADMIN)",
+                name="👑 COMMANDES INSTRUCTEUR (ADMINISTRATEUR)",
                 value=(
                     "**`!missionfinit @joueur`**\n"
-                    "Valider officiellement la mission d'un soldat.\n\n"
-                    "**`!listemissions`** | **`!addmission`** | **`!delmission`**"
+                    "Permet de valider et de clore officiellement la mission en cours d'un soldat après vérification.\n"
+                    "*Exemple : `!missionfinit @Mavie7620`*\n\n"
+                    "**`!listemissions`**\n"
+                    "Affiche l'intégralité des quêtes enregistrées dans les archives du fichier texte.\n"
+                    "*Exemple : `!listemissions`*\n\n"
+                    "**`!addmission <difficulté> <mission> pendant <délai>`**\n"
+                    "Ajoute un nouvel ordre disponible dans la base de données avec son temps imparti.\n"
+                    "*Exemple : `!addmission commune Miner 64 fer pendant 1 jour`*\n\n"
+                    "**`!delmission <difficulté> <numéro>`**\n"
+                    "Supprime définitivement une quête de la catégorie spécifiée via son numéro d'index.\n"
+                    "*Exemple : `!delmission commune 3`*"
                 ),
                 inline=False
             )
