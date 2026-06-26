@@ -40,6 +40,13 @@ def charger_missions_fichier():
                 structure[cat].append({"texte": texte, "delai": delai})
     return structure
 
+def réécrire_toutes_missions(structure):
+    """Écrase le fichier pour le mettre à jour après une suppression"""
+    with open(FILE_NAME, "w", encoding="utf-8") as f:
+        for cat, liste in structure.items():
+            for m in liste:
+                f.write(f"{cat}|{m['texte']}|{m['delai']}\n")
+
 def sauvegarder_mission_fichier(categorie, texte, delai):
     with open(FILE_NAME, "a", encoding="utf-8") as f:
         f.write(f"{categorie}|{texte}|{delai}\n")
@@ -49,7 +56,7 @@ missions_actives = {}
 
 @bot.event
 async def on_ready():
-    print(f"Le Bot MADAmission H24 est en ligne ! : {bot.user}")
+    print(f"Le Bot MADAmission H24 Pro est en ligne ! : {bot.user}")
 
 @bot.event
 async def on_message(message):
@@ -60,6 +67,7 @@ async def on_message(message):
     content = message.content.strip()
     content_lower = content.lower()
 
+    # 1. COMMANDE ADMIN : !listemissions
     if content_lower.startswith("!listemissions"):
         if not message.author.guild_permissions.administrator:
             await message.channel.send("❌ Seuls les administrateurs peuvent voir la liste complète.")
@@ -85,6 +93,7 @@ async def on_message(message):
             await message.channel.send(reponse)
         return
 
+    # 2. COMMANDE ADMIN : !addmission <difficulté> <texte> pendant <délai>
     if content_lower.startswith("!addmission"):
         if not message.author.guild_permissions.administrator:
             await message.channel.send("❌ Seuls les administrateurs peuvent ajouter des missions.")
@@ -102,7 +111,7 @@ async def on_message(message):
         else:
             await message.channel.send("❌ Catégorie invalide.")
             return
-        parties = texte_total.split(texte_total.split()[0], 1)[1].strip()
+        parties = text_total.split(texte_total.split()[0], 1)[1].strip()
         index_pendant = parties.lower().rfind("pendant")
         texte_mission = parties[:index_pendant].strip()
         delai = parties[index_pendant + 7:].strip()
@@ -111,6 +120,46 @@ async def on_message(message):
         await message.channel.send(f"⚜️ **Mission ajoutée !**\nCatégorie : `{cat}`\nMission : *{texte_mission}*\nDélai : *{delai}*")
         return
 
+    # 3. COMMANDE ADMIN : !delmission <difficulté> <numéro> (NOUVEAU !)
+    if content_lower.startswith("!delmission"):
+        if not message.author.guild_permissions.administrator:
+            await message.channel.send("❌ Seuls les administrateurs peuvent supprimer des missions.")
+            return
+        
+        mots = content_lower.split()
+        if len(mots) < 3:
+            await message.channel.send("❌ Mauvais format ! Exemple : `!delmission commune 2`")
+            return
+            
+        cat = mots[1]
+        if cat in ["commune", "commun"]: cat = "commune"
+        elif cat in ["moyenne", "moyen"]: cat = "moyenne"
+        elif cat in ["difficile"]: cat = "difficile"
+        elif cat in ["royal", "royale"]: cat = "royal"
+        else:
+            await message.channel.send("❌ Catégorie invalide.")
+            return
+            
+        try:
+            numero = int(mots[2]) - 1 # -1 car les listes en informatique commencent à 0
+        except ValueError:
+            await message.channel.send("❌ Le numéro de la mission doit être un chiffre valide (ex: 1, 2, 3...).")
+            return
+            
+        missions_dispo = charger_missions_fichier()
+        
+        if numero < 0 or numero >= len(missions_dispo[cat]):
+            await message.channel.send(f"❌ Numéro invalide. Il n'y a pas de mission n°{numero+1} dans la catégorie `{cat}`.")
+            return
+            
+        # Suppression de la mission
+        mission_supprimee = missions_dispo[cat].pop(numero)
+        réécrire_toutes_missions(missions_dispo)
+        
+        await message.channel.send(f"🗑️ **Mission supprimée par l'Archi-Duc !**\nLa mission *\"{mission_supprimee['texte']}\"* a été retirée de la catégorie `{cat}`.")
+        return
+
+    # 4. COMMANDE CITOYENS : !mission <difficulté>
     if content_lower.startswith("!mission"):
         joueur = message.author
         mots = content_lower.split()
@@ -145,8 +194,7 @@ async def on_message(message):
         else:
             await message.channel.send(f"❌ Tu n'as pas de mission en cours.")
 
-# Lance le serveur web puis le bot
+# Configuration et lancement
 keep_alive()
-# Récupère le token de manière sécurisée sur Render, sinon prend la chaîne par défaut
 token = os.environ.get("DISCORD_TOKEN", "TON_TOKEN_ICI")
 bot.run(token)
