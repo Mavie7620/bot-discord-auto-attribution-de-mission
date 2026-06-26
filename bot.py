@@ -49,23 +49,32 @@ def sauvegarder_mission_fichier(categorie, texte, delai):
     with open(FILE_NAME, "a", encoding="utf-8") as f:
         f.write(f"{categorie}|{texte}|{delai}\n")
 
-def extraire_jours(delai_texte):
+def extraire_duree(delai_texte):
     mots = delai_texte.lower().split()
+    valeur = 1
     for i, mot in enumerate(mots):
-        if "jour" in mot or "day" in mot:
-            try: return int(mots[i-1])
-            except (ValueError, IndexError): return 1
-        if "heure" in mot or "hour" in mot:
-            try: return int(mots[i-1]) / 24.0
-            except (ValueError, IndexError): return 0.1
-    return 3
+        try:
+            valeur = float(mots[i-1].replace(",", "."))
+        except (ValueError, IndexError):
+            continue
+        if "min" in mot or "mn" in mot:
+            return timedelta(minutes=valeur)
+        if "heure" in mot or "hour" in mot or "h" == mot:
+            return timedelta(hours=valeur)
+        if "jour" in mot or "day" in mot or "j" == mot:
+            return timedelta(days=valeur)
+        if "semaine" in mot or "week" in mot:
+            return timedelta(weeks=valeur)
+        if "mois" in mot or "moi" in mot or "month" in mot:
+            return timedelta(days=valeur * 30)
+    return timedelta(days=3)
 
 missions_dispo = charger_missions_fichier()
 missions_actives = {}
 
 @bot.event
 async def on_ready():
-    print(f"Le Bot MADAmission Pro avec alertes et pings est en ligne !")
+    print(f"Le Bot MADAmission Pro avec alertes dynamiques (1/2 et 1/4) est en ligne !")
 
 @bot.event
 async def on_message(message):
@@ -83,13 +92,34 @@ async def on_message(message):
         membre = message.guild.get_member(j_id)
         mention_membre = membre.mention if membre else f"<@{j_id}>"
         
-        if maintenant > m_info["date_fin"]:
+        duree_totale = m_info["duree_totale"]
+        date_debut = m_info["date_debut"]
+        date_fin = m_info["date_fin"]
+        
+        temps_restant = date_fin - maintenant
+        temps_ecoule = maintenant - date_debut
+
+        if maintenant > date_fin:
             joueurs_en_retard.append(j_id)
             await message.channel.send(f"🚨 **ALERTE RETARD** 🚨\nLe temps est écoulé ! La mission de {mention_membre} n'a pas été finie à temps ! Elle est définitivement échouée et supprimée. 👑")
             
-        elif m_info["date_fin"] - maintenant <= timedelta(hours=2) and not m_info["alerte_2h"]:
-            m_info["alerte_2h"] = True
-            await message.channel.send(f"⏳ **SABLIER PRESQUE VIDE** ⏳\nSoldat {mention_membre}, il vous reste **moins de 2 heures** pour accomplir votre mission : *\"{m_info['texte']}\"* ! Dépêchez-vous !")
+        elif temps_restant <= (duree_totale / 4) and not m_info["alerte_un_quart"]:
+            m_info["alerte_un_quart"] = True
+            m_info["alerte_moitie"] = True
+            
+            jours = temps_restant.days
+            heures, reste = divmod(temps_restant.seconds, 3600)
+            minutes, secondes = divmod(reste, 60)
+            
+            await message.channel.send(
+                f"⏳ **ATTENTION : CRITIQUE** ⏳\n"
+                f"Soldat {mention_membre}, il reste **moins d'un quart (25%) du temps imparti** pour votre mission : *\"{m_info['texte']}\"* !\n"
+                f"⚠️ **Temps restant exact :** `{jours}j {heures}h {minutes}mn {secondes}s` ! Dépêchez-vous !"
+            )
+
+        elif temps_ecoule >= (duree_totale / 2) and not m_info["alerte_moitie"]:
+            m_info["alerte_moitie"] = True
+            await message.channel.send(f"🌗 **MI-PARCOURS** 🌗\nSoldat {mention_membre}, la **moitié du temps** s'est déjà écoulée pour votre mission : *\"{m_info['texte']}\"* ! Ne relâchez pas vos efforts !")
 
     for j_id in joueurs_en_retard:
         if j_id in missions_actives:
@@ -258,14 +288,18 @@ async def on_message(message):
         
         réécrire_toutes_missions(missions_dispo)
 
-        jours_delai = extraire_jours(mission_choisie["delai"])
-        date_limite = datetime.now() + timedelta(days=jours_delai)
+        duree_calculee = extraire_duree(mission_choisie["delai"])
+        maintenant_debut = datetime.now()
+        date_limite = maintenant_debut + duree_calculee
 
         missions_actives[joueur.id] = {
             "texte": mission_choisie["texte"],
+            "date_debut": maintenant_debut,
             "date_fin": date_limite,
+            "duree_totale": duree_calculee,
             "cat": cat,
-            "alerte_2h": False
+            "alerte_moitie": False,
+            "alerte_un_quart": False
         }
 
         await message.channel.send(f"Votre mission est la suivante : *\"{mission_choisie['texte']}\"* (Délai : {mission_choisie['delai']})")
