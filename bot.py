@@ -65,7 +65,7 @@ missions_actives = {}
 
 @bot.event
 async def on_ready():
-    print(f"Le Bot MADAmission Pro avec alertes de temps est en ligne !")
+    print(f"Le Bot MADAmission Pro avec suppression automatique est en ligne !")
 
 @bot.event
 async def on_message(message):
@@ -85,7 +85,7 @@ async def on_message(message):
         
         if maintenant > m_info["date_fin"]:
             joueurs_en_retard.append(j_id)
-            await message.channel.send(f"🚨 **ALERTE RETARD** 🚨\nLe temps est écoulé ! La mission de {mention_membre} n'a pas été finie à temps ! Le Roi est déçu. 👑")
+            await message.channel.send(f"🚨 **ALERTE RETARD** 🚨\nLe temps est écoulé ! La mission de {mention_membre} n'a pas été finie à temps ! Elle est définitivement échouée et supprimée. 👑")
             
         elif m_info["date_fin"] - maintenant <= timedelta(hours=2) and not m_info["alerte_2h"]:
             m_info["alerte_2h"] = True
@@ -105,7 +105,7 @@ async def on_message(message):
             name="👥 COMMANDES SOLDAT",
             value=(
                 "**`!mission <difficulté>`**\n"
-                "Permet de recevoir un ordre aléatoire assigné par le Royaume selon la difficulté choisie.\n"
+                "Permet de recevoir un ordre unique du Royaume. Une fois prise, la mission devient indisponible pour les autres.\n"
                 "*Choix : `commune`, `moyenne`, `difficile`, `royal`*\n"
                 "*Exemple : `!mission difficile`*\n\n"
                 "**Signaler une fin de mission :**\n"
@@ -119,10 +119,10 @@ async def on_message(message):
                 name="👑 COMMANDES INSTRUCTEUR (ADMINISTRATEUR)",
                 value=(
                     "**`!missionfinit @joueur`**\n"
-                    "Permet de valider et de clore officiellement la mission en cours d'un soldat après vérification.\n"
+                    "Valide la mission d'un soldat et supprime définitivement l'ordre des fichiers du Royaume.\n"
                     "*Exemple : `!missionfinit @Mavie7620`*\n\n"
                     "**`!listemissions`**\n"
-                    "Affiche l'intégralité des quêtes enregistrées dans les archives du fichier texte.\n"
+                    "Affiche l'intégralité des quêtes encore disponibles dans les archives.\n"
                     "*Exemple : `!listemissions`*\n\n"
                     "**`!addmission <difficulté> <mission> pendant <délai>`**\n"
                     "Ajoute un nouvel ordre disponible dans la base de données avec son temps imparti.\n"
@@ -146,7 +146,7 @@ async def on_message(message):
         cible = message.mentions[0]
         if cible.id in missions_actives:
             del missions_actives[cible.id]
-            await message.channel.send(f"✅ **L'instructeur {message.author.mention} a vérifié et validé !** La mission de {cible.mention} est officiellement accomplie. Gloire au Royaume ! ⚜️")
+            await message.channel.send(f"✅ **L'instructeur {message.author.mention} a vérifié et validé !** La mission de {cible.mention} est officiellement accomplie et retirée du Royaume. Gloire ! ⚜️")
         else:
             await message.channel.send(f"❌ {cible.mention} n'a aucune mission active en ce moment.")
         return
@@ -172,7 +172,7 @@ async def on_message(message):
     if content_lower.startswith("!addmission"):
         if not message.author.guild_permissions.administrator: return
         texte_total = content[11:].strip()
-        mots = texte_total.split()
+        mots = text_total.split()
         if len(mots) < 4 or "pendant" not in texte_total.lower():
             await message.channel.send("❌ Exemple : `!addmission commune Miner fer pendant 1 jour`")
             return
@@ -230,12 +230,16 @@ async def on_message(message):
             await message.channel.send(f"❌ Soldat {joueur.mention}, tu as déjà une mission en cours !")
             return
 
+        missions_dispo = charger_missions_fichier()
         if not missions_dispo[cat]:
-            await message.channel.send(f"⚪ Aucune mission de type **{cat}** disponible.")
+            await message.channel.send(f"⚪ Aucune mission de type **{cat}** disponible en ce moment.")
             return
 
-        mission_choisie = random.choice(missions_dispo[cat])
+        index_choisi = random.randint(0, len(missions_dispo[cat]) - 1)
+        mission_choisie = missions_dispo[cat].pop(index_choisi)
         
+        réécrire_toutes_missions(missions_dispo)
+
         jours_delai = extraire_jours(mission_choisie["delai"])
         date_limite = datetime.now() + timedelta(days=jours_delai)
 
