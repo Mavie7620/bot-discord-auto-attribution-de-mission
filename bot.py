@@ -6,7 +6,6 @@ from threading import Thread
 from flask import Flask
 from datetime import datetime, timedelta
 
-# --- MINI SERVEUR WEB POUR METTRE LE BOT H24 ---
 app = Flask('')
 
 @app.route('/')
@@ -19,7 +18,6 @@ def run_web():
 def keep_alive():
     t = Thread(target=run_web)
     t.start()
-# -----------------------------------------------
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -63,7 +61,7 @@ def extraire_jours(delai_texte):
     return 3
 
 missions_dispo = charger_missions_fichier()
-missions_actives = {}  # {joueur_id: {"texte": ..., "date_fin": ..., "cat": ..., "alerte_2h": False}}
+missions_actives = {}
 
 @bot.event
 async def on_ready():
@@ -78,7 +76,6 @@ async def on_message(message):
     content = message.content.strip()
     content_lower = content.lower()
 
-    # --- SÉCURITÉ & VÉRIFICATION DU TEMPS (ALERTES ET RETARDS) ---
     maintenant = datetime.now()
     joueurs_en_retard = []
     
@@ -86,21 +83,18 @@ async def on_message(message):
         membre = message.guild.get_member(j_id)
         mention_membre = membre.mention if membre else f"<@{j_id}>"
         
-        # 1. Alerte retard (le temps est dépassé)
         if maintenant > m_info["date_fin"]:
             joueurs_en_retard.append(j_id)
             await message.channel.send(f"🚨 **ALERTE RETARD** 🚨\nLe temps est écoulé ! La mission de {mention_membre} n'a pas été finie à temps ! Le Roi est déçu. 👑")
             
-        # 2. Alerte temps restant (moins de 2 heures restantes et pas encore alerté)
         elif m_info["date_fin"] - maintenant <= timedelta(hours=2) and not m_info["alerte_2h"]:
-            m_info["alerte_2h"] = True # On marque l'alerte comme envoyée
+            m_info["alerte_2h"] = True
             await message.channel.send(f"⏳ **SABLIER PRESQUE VIDE** ⏳\nSoldat {mention_membre}, il vous reste **moins de 2 heures** pour accomplir votre mission : *\"{m_info['texte']}\"* ! Dépêchez-vous !")
 
     for j_id in joueurs_en_retard:
         if j_id in missions_actives:
             del missions_actives[j_id]
 
-    # 1. COMMANDE COMMUNE : !aide
     if content_lower in ["!aide", "!help"]:
         embed = discord.Embed(
             title="⚜️ TABLEAU DES ORDRES - MADAMISSION ⚜️",
@@ -129,7 +123,6 @@ async def on_message(message):
         await message.channel.send(embed=embed)
         return
 
-    # 2. COMMANDE INSTRUCTEUR : !missionfinit @joueur
     if content_lower.startswith("!missionfinit"):
         if not message.author.guild_permissions.administrator:
             await message.channel.send("❌ Seuls les instructeurs (administrateurs) peuvent valider les missions.")
@@ -145,7 +138,6 @@ async def on_message(message):
             await message.channel.send(f"❌ {cible.mention} n'a aucune mission active en ce moment.")
         return
 
-    # 3. COMMANDE ADMIN : !listemissions
     if content_lower.startswith("!listemissions"):
         if not message.author.guild_permissions.administrator:
             await message.channel.send("❌ Seuls les administrateurs peuvent voir la liste.")
@@ -164,7 +156,6 @@ async def on_message(message):
         await message.channel.send(reponse)
         return
 
-    # 4. COMMANDE ADMIN : !addmission
     if content_lower.startswith("!addmission"):
         if not message.author.guild_permissions.administrator: return
         texte_total = content[11:].strip()
@@ -189,7 +180,6 @@ async def on_message(message):
         await message.channel.send(f"⚜️ **Mission ajoutée !** (`{cat}` : *{texte_mission}*)")
         return
 
-    # 5. COMMANDE ADMIN : !delmission
     if content_lower.startswith("!delmission"):
         if not message.author.guild_permissions.administrator: return
         mots = content_lower.split()
@@ -208,7 +198,6 @@ async def on_message(message):
             await message.channel.send("🗑️ Mission retirée.")
         return
 
-    # 6. COMMANDE SOLDAT : !mission <difficulté>
     if content_lower.startswith("!mission"):
         joueur = message.author
         mots = content_lower.split()
@@ -241,13 +230,12 @@ async def on_message(message):
             "texte": mission_choisie["texte"],
             "date_fin": date_limite,
             "cat": cat,
-            "alerte_2h": False  # Initialisé à False pour pouvoir déclencher l'alerte plus tard
+            "alerte_2h": False
         }
 
         await message.channel.send(f"Votre mission est la suivante : *\"{mission_choisie['texte']}\"* (Délai : {mission_choisie['delai']})")
         return
 
-# Lancement
 keep_alive()
 token = os.environ.get("DISCORD_TOKEN", "TON_TOKEN_ICI")
 bot.run(token)
