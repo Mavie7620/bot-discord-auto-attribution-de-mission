@@ -158,7 +158,7 @@ async def verifier_temps_missions():
 @bot.event
 async def on_ready():
     if not verifier_temps_missions.is_running(): verifier_temps_missions.start()
-    print("Bot MADAmission Pro (Uniquement rôle Instructeur) connecté !")
+    print("Bot MADAmission Pro configuré avec aide détaillée !")
 
 @bot.event
 async def on_message(message):
@@ -168,10 +168,30 @@ async def on_message(message):
     content_lower = content.lower()
 
     if content_lower in ["!aide", "!help"]:
-        embed = discord.Embed(title="⚜️ TABLEAU DES ORDRES ⚜️", color=discord.Color.gold())
-        embed.add_field(name="👥 CITOYENS", value="`!mission <difficulté>`\n`!fin`\n`!missions_en_cours`\n`!profil [@joueur]`\n`!historique`", inline=False)
+        embed = discord.Embed(title="⚜️ TABLEAU DES ORDRES DU ROYAUME ⚜️", color=discord.Color.gold())
+        
+        # Section Citoyens (Accessible à tous)
+        citoyen_desc = (
+            "`!mission <difficulté>`\n↳ Pioche une mission aléatoire de la catégorie spécifiée (`commune`, `moyenne`, `difficile`, `royal`).\n\n"
+            "`!fin`\n↳ Signale aux Instructeurs que vous estimez avoir accompli votre mission actuelle.\n\n"
+            "`!missions_en_cours`\n↳ Affiche la liste globale de toutes les missions en cours dans le Royaume avec barres de progression.\n\n"
+            "`!profil [@joueur]`\n↳ Consulte votre profil (grade textuel, taux de réussite, détails) ou celui d'un autre citoyen.\n\n"
+            "`!historique`\n↳ Affiche vos 5 dernières actions (Missions réussies ou échouées) avec la date.\n\n"
+            "`!stats_royaume`\n↳ Affiche les statistiques globales du Royaume (Efficacité générale, total de missions et joueur le plus actif)."
+        )
+        embed.add_field(name="👥 CITOYENS", value=citoyen_desc, inline=False)
+        
+        # Section Instructeurs (Administrateurs)
         if message.author.guild_permissions.administrator:
-            embed.add_field(name="👑 INSTRUCTEURS", value="`!missionfinit @joueur`\n`!missionechec @joueur`\n`!listemissions`\n`!stats_royaume`\n`!addmission <diff> <texte> pendant <délai>`\n`!delmission <diff> <num>`", inline=False)
+            admin_desc = (
+                "`!missionfinit @joueur`\n↳ Valide définitivement la mission en cours d'un joueur et incrémente ses succès.\n\n"
+                "`!missionechec @joueur`\n↳ Annule et marque de force la mission en cours du joueur ciblé comme un échec.\n\n"
+                "`!listemissions`\n↳ Affiche le registre complet de toutes les missions stockées et configurées dans le fichier de configuration.\n\n"
+                "`!addmission <difficulté> <texte> pendant <délai>`\n↳ Ajoute une nouvelle mission (Ex: `!addmission commune Miner du fer pendant 2 heures`).\n\n"
+                "`!delmission <difficulté> <numéro>`\n↳ Supprime une mission spécifique du registre en se basant sur le numéro fourni par `!listemissions`."
+            )
+            embed.add_field(name="👑 INSTRUCTEURS (ADMIN)", value=admin_desc, inline=False)
+            
         await message.channel.send(embed=embed)
         return
 
@@ -231,6 +251,28 @@ async def on_message(message):
         await message.channel.send(msg)
         return
 
+    if content_lower == "!stats_royaume":
+        profils = charger_profils()
+        t_reus, t_eche, max_act, top_user = 0, 0, 0, "Aucun"
+        for u_id, st in profils.items():
+            u_r = sum(st["reussies"].values())
+            u_e = sum(st["echouees"].values())
+            t_reus += u_r
+            t_eche += u_e
+            if (u_r + u_e) > max_act:
+                max_act = (u_r + u_e)
+                top_user = f"<@{u_id}>"
+        
+        t_tot = t_reus + t_eche
+        t_tx = int((t_reus / t_tot) * 100) if t_tot > 0 else 100
+        
+        embed = discord.Embed(title="⚜️ ARCHIVES ADMINISTRATIVES ET STATISTIQUES ⚜️", color=discord.Color.dark_gold())
+        embed.add_field(name="🌍 Total de Missions Lancées", value=f"`{t_tot}` décrets", inline=True)
+        embed.add_field(name="📈 Efficacité Générale", value=f"`{t_tx}%` de réussite globale", inline=True)
+        embed.add_field(name="🏆 Citoyen le plus Actif", value=f"{top_user} avec `{max_act}` missions tentées", inline=False)
+        await message.channel.send(embed=embed)
+        return
+
     if content_lower.startswith("!missionechec"):
         if not message.author.guild_permissions.administrator: return
         if not message.mentions:
@@ -260,29 +302,6 @@ async def on_message(message):
             )
         else:
             await message.channel.send("❌ Ce joueur n'a pas de mission active.")
-        return
-
-    if content_lower == "!stats_royaume":
-        if not message.author.guild_permissions.administrator: return
-        profils = charger_profils()
-        t_reus, t_eche, max_act, top_user = 0, 0, 0, "Aucun"
-        for u_id, st in profils.items():
-            u_r = sum(st["reussies"].values())
-            u_e = sum(st["echouees"].values())
-            t_reus += u_r
-            t_eche += u_e
-            if (u_r + u_e) > max_act:
-                max_act = (u_r + u_e)
-                top_user = f"<@{u_id}>"
-        
-        t_tot = t_reus + t_eche
-        t_tx = int((t_reus / t_tot) * 100) if t_tot > 0 else 100
-        
-        embed = discord.Embed(title="⚜️ ARCHIVES ADMINISTRATIVES ET STATISTIQUES ⚜️", color=discord.Color.dark_gold())
-        embed.add_field(name="🌍 Total de Missions Lancées", value=f"`{t_tot}` décrets", inline=True)
-        embed.add_field(name="📈 Efficacité Générale", value=f"`{t_tx}%` de réussite globale", inline=True)
-        embed.add_field(name="🏆 Citoyen le plus Actif", value=f"{top_user} avec `{max_act}` missions tentées", inline=False)
-        await message.channel.send(embed=embed)
         return
 
     if content_lower == "!fin":
