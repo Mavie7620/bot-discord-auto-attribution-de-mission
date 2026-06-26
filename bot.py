@@ -41,7 +41,6 @@ def charger_missions_fichier():
     return structure
 
 def réécrire_toutes_missions(structure):
-    """Écrase le fichier pour le mettre à jour après une suppression"""
     with open(FILE_NAME, "w", encoding="utf-8") as f:
         for cat, liste in structure.items():
             for m in liste:
@@ -98,29 +97,40 @@ async def on_message(message):
         if not message.author.guild_permissions.administrator:
             await message.channel.send("❌ Seuls les administrateurs peuvent ajouter des missions.")
             return
+        
         texte_total = content[11:].strip()
         mots = texte_total.split()
+        
         if len(mots) < 4 or "pendant" not in texte_total.lower():
             await message.channel.send("❌ Mauvais format ! Exemple : `!addmission commune Miner fer pendant 1 jour`")
             return
+            
         cat = mots[0].lower()
         if cat in ["commune", "commun"]: cat = "commune"
         elif cat in ["moyenne", "moyen"]: cat = "moyenne"
         elif cat in ["difficile"]: cat = "difficile"
         elif cat in ["royal", "royale"]: cat = "royal"
         else:
-            await message.channel.send("❌ Catégorie invalide.")
+            await message.channel.send("❌ Catégorie invalide. Choix : `commune`, `moyenne`, `difficile`, `royal`.")
             return
-        parties = text_total.split(texte_total.split()[0], 1)[1].strip()
+
+        # On enlève proprement la catégorie du texte
+        parties = texte_total.split(None, 1)[1].strip()
         index_pendant = parties.lower().rfind("pendant")
+        
         texte_mission = parties[:index_pendant].strip()
         delai = parties[index_pendant + 7:].strip()
+        
+        if not texte_mission or not delai:
+            await message.channel.send("❌ Erreur de format. Écris la mission, puis le mot `pendant`, puis le délai.")
+            return
+
         sauvegarder_mission_fichier(cat, texte_mission, delai)
         missions_dispo = charger_missions_fichier()
         await message.channel.send(f"⚜️ **Mission ajoutée !**\nCatégorie : `{cat}`\nMission : *{texte_mission}*\nDélai : *{delai}*")
         return
 
-    # 3. COMMANDE ADMIN : !delmission <difficulté> <numéro> (NOUVEAU !)
+    # 3. COMMANDE ADMIN : !delmission <difficulté> <numéro>
     if content_lower.startswith("!delmission"):
         if not message.author.guild_permissions.administrator:
             await message.channel.send("❌ Seuls les administrateurs peuvent supprimer des missions.")
@@ -141,22 +151,19 @@ async def on_message(message):
             return
             
         try:
-            numero = int(mots[2]) - 1 # -1 car les listes en informatique commencent à 0
+            numero = int(mots[2]) - 1
         except ValueError:
-            await message.channel.send("❌ Le numéro de la mission doit être un chiffre valide (ex: 1, 2, 3...).")
+            await message.channel.send("❌ Le numéro doit être un chiffre valide.")
             return
             
         missions_dispo = charger_missions_fichier()
-        
         if numero < 0 or numero >= len(missions_dispo[cat]):
-            await message.channel.send(f"❌ Numéro invalide. Il n'y a pas de mission n°{numero+1} dans la catégorie `{cat}`.")
+            await message.channel.send(f"❌ Numéro invalide. Pas de mission n°{numero+1} dans `{cat}`.")
             return
             
-        # Suppression de la mission
         mission_supprimee = missions_dispo[cat].pop(numero)
         réécrire_toutes_missions(missions_dispo)
-        
-        await message.channel.send(f"🗑️ **Mission supprimée par l'Archi-Duc !**\nLa mission *\"{mission_supprimee['texte']}\"* a été retirée de la catégorie `{cat}`.")
+        await message.channel.send(f"🗑️ **Mission retirée !**\n*\"{mission_supprimee['texte']}\"* a été supprimée de la catégorie `{cat}`.")
         return
 
     # 4. COMMANDE CITOYENS : !mission <difficulté>
