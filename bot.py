@@ -66,7 +66,49 @@ async def on_message(message):
     content = message.content.strip()
     content_lower = content.lower()
 
-    # 1. COMMANDE ADMIN : !listemissions
+    # 1. COMMANDE COMMUNE : !aide ou !help (NOUVEAU !)
+    if content_lower in ["!aide", "!help"]:
+        embed = discord.Embed(
+            title="⚜️ TABLEAU DES ORDRES - MADAMISSION ⚜️",
+            description="Voici la liste des commandes disponibles pour interagir avec le Royaume.",
+            color=discord.Color.gold()
+        )
+        
+        # Section Citoyens
+        embed.add_field(
+            name="👥 COMMANDES CITOYENS",
+            value=(
+                "**`!mission <difficulté>`**\n"
+                "Demander un ordre aléatoire (Choix : `commune`, `moyenne`, `difficile`, `royal`).\n"
+                "*Exemple : `!mission commune`*\n\n"
+                "**`!rendre`**\n"
+                "Valider/rendre votre mission en cours pour pouvoir en prendre une autre."
+            ),
+            inline=False
+        )
+        
+        # Section Admins
+        if message.author.guild_permissions.administrator:
+            embed.add_field(
+                name="👑 COMMANDES ADMINISTRATEUR",
+                value=(
+                    "**`!listemissions`**\n"
+                    "Afficher la liste complète de toutes les missions enregistrées.\n\n"
+                    "**`!addmission <difficulté> <mission> pendant <délai>`**\n"
+                    "Ajouter un nouvel ordre au Royaume.\n"
+                    "*Exemple : `!addmission commune Miner 64 fer pendant 1 jour`*\n\n"
+                    "**`!delmission <difficulté> <numéro>`**\n"
+                    "Supprimer une mission spécifique grâce à son numéro.\n"
+                    "*Exemple : `!delmission commune 2`*"
+                ),
+                inline=False
+            )
+            
+        embed.set_footer(text="Que la gloire du Royaume vous accompagne.")
+        await message.channel.send(embed=embed)
+        return
+
+    # 2. COMMANDE ADMIN : !listemissions
     if content_lower.startswith("!listemissions"):
         if not message.author.guild_permissions.administrator:
             await message.channel.send("❌ Seuls les administrateurs peuvent voir la liste complète.")
@@ -92,7 +134,7 @@ async def on_message(message):
             await message.channel.send(reponse)
         return
 
-    # 2. COMMANDE ADMIN : !addmission <difficulté> <texte> pendant <délai>
+    # 3. COMMANDE ADMIN : !addmission
     if content_lower.startswith("!addmission"):
         if not message.author.guild_permissions.administrator:
             await message.channel.send("❌ Seuls les administrateurs peuvent ajouter des missions.")
@@ -114,7 +156,6 @@ async def on_message(message):
             await message.channel.send("❌ Catégorie invalide. Choix : `commune`, `moyenne`, `difficile`, `royal`.")
             return
 
-        # On enlève proprement la catégorie du texte
         parties = texte_total.split(None, 1)[1].strip()
         index_pendant = parties.lower().rfind("pendant")
         
@@ -130,7 +171,7 @@ async def on_message(message):
         await message.channel.send(f"⚜️ **Mission ajoutée !**\nCatégorie : `{cat}`\nMission : *{texte_mission}*\nDélai : *{delai}*")
         return
 
-    # 3. COMMANDE ADMIN : !delmission <difficulté> <numéro>
+    # 4. COMMANDE ADMIN : !delmission
     if content_lower.startswith("!delmission"):
         if not message.author.guild_permissions.administrator:
             await message.channel.send("❌ Seuls les administrateurs peuvent supprimer des missions.")
@@ -166,7 +207,7 @@ async def on_message(message):
         await message.channel.send(f"🗑️ **Mission retirée !**\n*\"{mission_supprimee['texte']}\"* a été supprimée de la catégorie `{cat}`.")
         return
 
-    # 4. COMMANDE CITOYENS : !mission <difficulté>
+    # 5. COMMANDE CITOYENS : !mission
     if content_lower.startswith("!mission"):
         joueur = message.author
         mots = content_lower.split()
@@ -193,6 +234,7 @@ async def on_message(message):
         await message.channel.send(reponse)
         return
 
+    # 6. COMMANDE CITOYENS : !rendre
     if content_lower == "!rendre":
         joueur = message.author
         if joueur.id in missions_actives:
