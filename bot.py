@@ -1,5 +1,5 @@
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 import random
 import os
 from threading import Thread
@@ -72,24 +72,18 @@ def extraire_duree(delai_texte):
 missions_dispo = charger_missions_fichier()
 missions_actives = {}
 
-@bot.event
-async def on_ready():
-    print(f"Le Bot MADAmission Pro avec alertes dynamiques (1/2 et 1/4) est en ligne !")
-
-@bot.event
-async def on_message(message):
-    global missions_dispo
-    if message.author.bot:
-        return
-
-    content = message.content.strip()
-    content_lower = content.lower()
-
+@tasks.loop(seconds=1)
+async def verifier_temps_missions():
     maintenant = datetime.now()
     joueurs_en_retard = []
     
     for j_id, m_info in list(missions_actives.items()):
-        membre = message.guild.get_member(j_id)
+        channel = bot.get_channel(m_info["channel_id"])
+        if not channel:
+            continue
+            
+        guild = channel.guild
+        membre = guild.get_member(j_id)
         mention_membre = membre.mention if membre else f"<@{j_id}>"
         
         duree_totale = m_info["duree_totale"]
@@ -101,7 +95,7 @@ async def on_message(message):
 
         if maintenant > date_fin:
             joueurs_en_retard.append(j_id)
-            await message.channel.send(f"🚨 **ALERTE RETARD** 🚨\nLe temps est écoulé ! La mission de {mention_membre} n'a pas été finie à temps ! Elle est définitivement échouée et supprimée. 👑")
+            await channel.send(f"🚨 **ALERTE RETARD** 🚨\nLe temps est écoulé ! La mission de {mention_membre} n'a pas été finie à temps ! Elle est définitivement échouée et supprimée. 👑")
             
         elif temps_restant <= (duree_totale / 4) and not m_info["alerte_un_quart"]:
             m_info["alerte_un_quart"] = True
@@ -111,7 +105,7 @@ async def on_message(message):
             heures, reste = divmod(temps_restant.seconds, 3600)
             minutes, secondes = divmod(reste, 60)
             
-            await message.channel.send(
+            await channel.send(
                 f"⏳ **ATTENTION : CRITIQUE** ⏳\n"
                 f"Soldat {mention_membre}, il reste **moins d'un quart (25%) du temps imparti** pour votre mission : *\"{m_info['texte']}\"* !\n"
                 f"⚠️ **Temps restant exact :** `{jours}j {heures}h {minutes}mn {secondes}s` ! Dépêchez-vous !"
@@ -119,11 +113,26 @@ async def on_message(message):
 
         elif temps_ecoule >= (duree_totale / 2) and not m_info["alerte_moitie"]:
             m_info["alerte_moitie"] = True
-            await message.channel.send(f"🌗 **MI-PARCOURS** 🌗\nSoldat {mention_membre}, la **moitié du temps** s'est déjà écoulée pour votre mission : *\"{m_info['texte']}\"* ! Ne relâchez pas vos efforts !")
+            await channel.send(f"🌗 **MI-PARCOURS** 🌗\nSoldat {mention_membre}, la **moitié du temps** s'est déjà écoulée pour votre mission : *\"{m_info['texte']}\"* ! Ne relâchez pas vos efforts !")
 
     for j_id in joueurs_en_retard:
         if j_id in missions_actives:
             del missions_actives[j_id]
+
+@bot.event
+async def on_ready():
+    if not verifier_temps_missions.is_running():
+        verifier_temps_missions.start()
+    print(f"Le Bot MADAmission Pro avec boucles automatiques est en ligne !")
+
+@bot.event
+async def on_message(message):
+    global missions_dispo
+    if message.author.bot:
+        return
+
+    content = message.content.strip()
+    content_lower = content.lower()
 
     if content_lower in ["!aide", "!help"]:
         embed = discord.Embed(
@@ -298,6 +307,7 @@ async def on_message(message):
             "date_fin": date_limite,
             "duree_totale": duree_calculee,
             "cat": cat,
+            "channel_id": message.channel.id,
             "alerte_moitie": False,
             "alerte_un_quart": False
         }
