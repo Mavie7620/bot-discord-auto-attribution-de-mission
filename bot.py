@@ -57,20 +57,6 @@ def extraire_duree(delai_texte):
 missions_dispo = charger_missions_fichier()
 missions_actives = {}
 
-# Texte condensé au maximum pour faire moins de 15 lignes dans Discord
-TEXTE_ECHEC = (
-    "⚜️ **𝕾𝖞𝖘𝖙𝖊̀𝖒𝖊 𝖉𝖊 𝕸𝖎𝖘𝖘𝖎𝖔𝖓𝖘** ⚜️\n"
-    "Ⅰ. **Demande** : *\"J'aimerais obtenir une mission, commune/moyenne/difficile/Royal.\"*\n"
-    "Ⅱ. **Attribution** : Aléatoire par un supérieur. 1 seule active. Non modifiable.\n"
-    "Ⅲ. **Difficultés** :\n"
-    "⚪ *Commun* : Courte durée (quelques heures), tâches simples.\n"
-    "🟢 *Moyen* : ~10 heures, demande de l'investissement.\n"
-    "🟠 *Difficile* : Longues missions sur plusieurs jours.\n"
-    "🔴 *Décret Royal* : Attribué en audience, 1 à 2 semaines, public.\n"
-    "Ⅳ. **Promotions** : Prouve l'implication. Requis pour monter en grade.\n"
-    "Ⅴ. **Rappel** : Abandonner/refuser sans raison est sanctionné. Persévérez !"
-)
-
 @tasks.loop(seconds=1)
 async def verifier_temps_missions():
     maintenant = datetime.now()
@@ -96,11 +82,16 @@ async def verifier_temps_missions():
                 except discord.Forbidden: role_instructeur = None
             mention_instructeur = role_instructeur.mention if role_instructeur else "@Instructeur"
             
-            # Message global faisant pile poil moins de 15 lignes
+            # Message d'échec de moins de 15 lignes avec l'article V mis en valeur
             await channel.send(
                 f"🚨 **MISSION ÉCHOUÉE** 🚨\n"
-                f"Temps écoulé pour {mention_membre} ! {mention_instructeur} la quête retourne aux archives.\n\n"
-                f"{TEXTE_ECHEC}"
+                f"Le temps imparti est écoulé ! La mission de {mention_membre} a échoué.\n"
+                f"📢 **Avis aux supérieurs :** {mention_instructeur}, un citoyen n'a pas honoré son décret à temps.\n\n"
+                f"⚜️ **𝕾𝖞𝖘𝖙𝖊̀𝖒𝖊 𝖉𝖊 𝕸𝖎𝖘𝖘𝖎𝖔𝖓𝖘 𝖉𝖚 𝕽𝖔𝖞𝖆𝖚𝖒𝖊** ⚜️\n"
+                f"**D'après l'article Ⅴ — Rappel :**\n"
+                f"- **Refuser ou abandonner une mission attribuée sans raison valable peut être sanctionné.**\n"
+                f"- *Le Royaume récompense l'investissement et la persévérance.*\n"
+                f"- *Les missions constituent l'un des principaux moyens de progresser au sein du Royaume.*"
             )
         elif temps_restant <= (duree_totale / 4) and not m_info["alerte_un_quart"]:
             m_info["alerte_un_quart"] = True
@@ -119,7 +110,7 @@ async def verifier_temps_missions():
 @bot.event
 async def on_ready():
     if not verifier_temps_missions.is_running(): verifier_temps_missions.start()
-    print("Bot MADAmission ultra-condensé en ligne !")
+    print("Bot MADAmission avec article V mis en gras en ligne !")
 
 @bot.event
 async def on_message(message):
