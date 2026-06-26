@@ -65,7 +65,7 @@ missions_actives = {}
 
 @bot.event
 async def on_ready():
-    print(f"Le Bot MADAmission Pro avec suppression automatique est en ligne !")
+    print(f"Le Bot MADAmission Pro avec alertes et pings est en ligne !")
 
 @bot.event
 async def on_message(message):
@@ -108,9 +108,9 @@ async def on_message(message):
                 "Permet de recevoir un ordre unique du Royaume. Une fois prise, la mission devient indisponible pour les autres.\n"
                 "*Choix : `commune`, `moyenne`, `difficile`, `royal`*\n"
                 "*Exemple : `!mission difficile`*\n\n"
-                "**Signaler une fin de mission :**\n"
-                "Une fois votre devoir accompli, interpellez directement vos supérieurs dans le salon :\n"
-                "`@instructeur j'ai finit ma mission`"
+                "**`!fin`**\n"
+                "Signale officiellement que vous avez terminé votre mission actuelle et alerte les instructeurs pour vérification.\n"
+                "*Exemple : `!fin`*"
             ),
             inline=False
         )
@@ -134,6 +134,24 @@ async def on_message(message):
                 inline=False
             )
         await message.channel.send(embed=embed)
+        return
+
+    if content_lower == "!fin":
+        joueur = message.author
+        if joueur.id not in missions_actives:
+            await message.channel.send(f"❌ {joueur.mention}, tu n'as aucune mission active en ce moment.")
+            return
+
+        role_instructeur = discord.utils.get(message.guild.roles, name="Instructeur")
+        if not role_instructeur:
+            try:
+                role_instructeur = await message.guild.create_role(name="Instructeur", mentionable=True, color=discord.Color.blue())
+            except discord.Forbidden:
+                await message.channel.send("❌ Je n'ai pas les permissions nécessaires pour créer le rôle 'Instructeur'.")
+                return
+
+        m_info = missions_actives[joueur.id]
+        await message.channel.send(f"📢 {role_instructeur.mention} ! Le soldat {joueur.mention} déclare avoir terminé sa mission : *\"{m_info['texte']}\"*.\nUn administrateur doit valider avec `!missionfinit {joueur.mention}`.")
         return
 
     if content_lower.startswith("!missionfinit"):
@@ -172,7 +190,7 @@ async def on_message(message):
     if content_lower.startswith("!addmission"):
         if not message.author.guild_permissions.administrator: return
         texte_total = content[11:].strip()
-        mots = text_total.split()
+        mots = texte_total.split()
         if len(mots) < 4 or "pendant" not in texte_total.lower():
             await message.channel.send("❌ Exemple : `!addmission commune Miner fer pendant 1 jour`")
             return
