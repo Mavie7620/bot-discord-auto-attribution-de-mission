@@ -72,6 +72,42 @@ def extraire_duree(delai_texte):
 missions_dispo = charger_missions_fichier()
 missions_actives = {}
 
+TEXTE_ECHEC = (
+    "⚜️** 𝕾𝖞𝖘𝖙𝖊̀𝖒𝖊 𝖉𝖊 𝕸𝖎𝖘𝖘𝖎𝖔𝖓𝖘 𝖉𝖚 𝕽𝖔𝖞𝖆𝖚𝖒𝖊** ⚜️\n\n"
+    "**Les missions permettent aux citoyens de servir activement le Royaume et de d'émontrer leur implication.**\n\n"
+    "Ⅰ — **Demande de mission**\n\n"
+    "**Le citoyen peut demander une mission à tout moment en utilisant la formule suivante :**\n\n"
+    "- *\"J'aimerais obtenir une mission, commune / moyenne / difficile / Royal.\"*\n\n"
+    "Ⅱ — **Attribution**\n"
+    "- *Le citoyen ne choisit jamais sa mission.*\n"
+    "- *Les missions sont attribuées aléatoirement par un supérieur.*\n"
+    "- *Une seule mission peut être active à la fois.*\n"
+    "- *Une mission attribuée ne peut pas être changée.*\n\n"
+    "Ⅲ — **Difficultés**\n\n"
+    "⚪** Ordre Commun**\n\n"
+    "- *Courte durée, environ quelque heures.*\n"
+    "- *Tâches simples.*\n\n"
+    "🟢 **Ordre Moyen**\n\n"
+    "- *Durée moyenne environ une dizaine d'heures.*\n"
+    "- *Difficulté moyenne.*\n"
+    "- *Demande davantage d'investissement.*\n\n"
+    "🟠 **Ordre Difficile**\n\n"
+    "- *Longues missions nécessitant plusieurs jours.*\n\n"
+    "🔴 **Décret Royal**\n\n"
+    "- *Missions attribuée lors de l'audience*\n"
+    "- *Peuvent durer une à deux semaines.*\n"
+    "- *Sont annoncées publiquement au Royaume.*\n\n"
+    "Ⅳ — **Promotions**\n"
+    "- *Les missions donnent peu de récompense matérielle.*\n"
+    "- *Elles servent à démontrer l'implication d'un citoyen.*\n"
+    "- *Certaines promotions nécessitent un nombre minimal de missions accomplies.*\n"
+    "- *Les différentes difficultés pourront être exigées pour accéder aux rangs supérieurs.*\n\n"
+    "Ⅴ — **Rappel**\n"
+    "- *Refuser ou abandonner une mission attribuée sans raison valable peut être sanctionné.*\n"
+    "- *Le Royaume récompense l'investissement et la persévérance.*\n"
+    "- *Les missions constituent l'un des principaux moyens de progresser au sein du Royaume.*"
+)
+
 @tasks.loop(seconds=1)
 async def verifier_temps_missions():
     maintenant = datetime.now()
@@ -95,7 +131,10 @@ async def verifier_temps_missions():
 
         if maintenant > date_fin:
             joueurs_en_retard.append(j_id)
-            await channel.send(f"🚨 **ALERTE RETARD** 🚨\nLe temps est écoulé ! La mission de {mention_membre} n'a pas été finie à temps ! Elle est définitivement échouée et supprimée. 👑")
+            
+            sauvegarder_mission_fichier(m_info["cat"], m_info["texte"], m_info["delai_texte"])
+            
+            await channel.send(f"🚨 **ALERTE RETARD** 🚨\nLe temps est écoulé ! La mission de {mention_membre} n'a pas été finie à temps ! Le Roi est déçu. 👑\n\n{TEXTE_ECHEC}")
             
         elif temps_restant <= (duree_totale / 4) and not m_info["alerte_un_quart"]:
             m_info["alerte_un_quart"] = True
@@ -123,7 +162,7 @@ async def verifier_temps_missions():
 async def on_ready():
     if not verifier_temps_missions.is_running():
         verifier_temps_missions.start()
-    print(f"Le Bot MADAmission Pro avec boucles automatiques est en ligne !")
+    print(f"Le Bot MADAmission Pro avec boucles et règles d'échec est en ligne !")
 
 @bot.event
 async def on_message(message):
@@ -303,6 +342,7 @@ async def on_message(message):
 
         missions_actives[joueur.id] = {
             "texte": mission_choisie["texte"],
+            "delai_texte": mission_choisie["delai"],
             "date_debut": maintenant_debut,
             "date_fin": date_limite,
             "duree_totale": duree_calculee,
