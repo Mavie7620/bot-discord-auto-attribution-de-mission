@@ -74,7 +74,7 @@ missions_actives = {}
 
 TEXTE_ECHEC = (
     "⚜️** 𝕾𝖞𝖘𝖙𝖊̀𝖒𝖊 𝖉𝖊 𝕸𝖎𝖘𝖘𝖎𝖔𝖓𝖘 𝖉𝖚 𝕽𝖔𝖞𝖆𝖚𝖒𝖊** ⚜️\n\n"
-    "**Les missions permettent aux citoyens de servir activement le Royaume et de d'émontrer leur implication.**\n\n"
+    "**Les missions permettent aux citoyens de servir activement le Royaume et de démontrer leur implication.**\n\n"
     "Ⅰ — **Demande de mission**\n\n"
     "**Le citoyen peut demander une mission à tout moment en utilisant la formule suivante :**\n\n"
     "- *\"J'aimerais obtenir une mission, commune / moyenne / difficile / Royal.\"*\n\n"
@@ -134,7 +134,21 @@ async def verifier_temps_missions():
             
             sauvegarder_mission_fichier(m_info["cat"], m_info["texte"], m_info["delai_texte"])
             
-            await channel.send(f"🚨 **ALERTE RETARD** 🚨\nLe temps est écoulé ! La mission de {mention_membre} n'a pas été finie à temps ! Le Roi est déçu. 👑\n\n{TEXTE_ECHEC}")
+            role_instructeur = discord.utils.get(guild.roles, name="Instructeur")
+            if not role_instructeur:
+                try:
+                    role_instructeur = await guild.create_role(name="Instructeur", mentionable=True, color=discord.Color.blue())
+                except discord.Forbidden:
+                    role_instructeur = None
+
+            mention_instructeur = role_instructeur.mention if role_instructeur else "@Instructeur"
+            
+            await channel.send(
+                f"🚨 **ALERTE MISSION ÉCHOUÉE** 🚨\n"
+                f"Le temps imparti est écoulé ! La mission de {mention_membre} a échoué. Le Royaume a été notifié.\n"
+                f"📢 Avis aux supérieurs : {mention_instructeur}, un citoyen n'a pas honoré son décret à temps.\n\n"
+                f"{TEXTE_ECHEC}"
+            )
             
         elif temps_restant <= (duree_totale / 4) and not m_info["alerte_un_quart"]:
             m_info["alerte_un_quart"] = True
@@ -162,7 +176,7 @@ async def verifier_temps_missions():
 async def on_ready():
     if not verifier_temps_missions.is_running():
         verifier_temps_missions.start()
-    print(f"Le Bot MADAmission Pro avec boucles et règles d'échec est en ligne !")
+    print(f"Le Bot MADAmission Pro avec boucles et alertes instructeurs est en ligne !")
 
 @bot.event
 async def on_message(message):
