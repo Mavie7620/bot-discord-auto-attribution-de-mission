@@ -202,7 +202,7 @@ async def verifier_temps_missions():
 @bot.event
 async def on_ready():
     if not verifier_temps_missions.is_running(): verifier_temps_missions.start()
-    print("Bot MADAmission Pro configuré avec commandes de points !")
+    print("Bot MADAmission Pro — Correctif complet appliqué !")
 
 @bot.event
 async def on_message(message):
@@ -211,94 +211,93 @@ async def on_message(message):
     content = message.content.strip()
     content_lower = content.lower()
 
+    # --- CORRECTION DU !AIDE (IL Y A TOUT SANS EXCEPTION MAINTENANT) ---
     if content_lower in ["!aide", "!help"]:
         embed = discord.Embed(title="⚜️ TABLEAU DES ORDRES DE MOCHA ⚜️", color=discord.Color.gold())
         
         citoyen_desc = (
-            "`!mission <difficulté>`\n↳ Pioche une mission solo.\n\n"
-            "`!mission_groupe <difficulté> @joueur...`\n↳ Lance une mission collective.\n\n"
-            "`!rejoindre_urgence`\n↳ S'inscrire sur le décret d'urgence actif.\n\n"
-            "`!fin`\n↳ Déclare avoir fini l'objectif actuel.\n\n"
-            "`!missions_en_cours`\n↳ Affiche l'état global du pays."
+            "⚔️ **SYSTÈME DE QUÊTES COMPLET**\n"
+            "`!mission <difficulté>`\n↳ Pioche une mission en solo (`commune`, `moyenne`, `difficile`, `royal`).\n\n"
+            "`!mission_groupe <difficulté> @joueur1...`\n↳ Déclenche une mission collective avec ton escouade.\n\n"
+            "`!rejoindre_urgence`\n↳ Prends les armes et inscris-toi sur le décret d'urgence national.\n\n"
+            "`!fin`\n↳ Informe les Instructeurs que tu as accompli ta mission ou l'urgence.\n\n"
+            "`!missions_en_cours`\n↳ Affiche le statut de toutes les tâches actives et de la crise.\n\n"
+            "📊 **INFORMATIONS ET RANGS**\n"
+            "`!profil [@joueur]`\n↳ Regarde ton rang, tes victoires, tes échecs et ton taux de réussite.\n\n"
+            "`!historique`\n↳ Affiche le parchemin de tes 5 dernières actions accomplies.\n\n"
+            "`!stats_royaume`\n↳ Regarde les statistiques globales de Mocha (efficacité, réussite, crises)."
         )
-        embed.add_field(name="👥 CITOYENS DE MOCHA", value=citoyen_desc, inline=False)
+        embed.add_field(name="👥 ESPACE DES CITOYENS", value=citoyen_desc, inline=False)
         
         if message.author.guild_permissions.administrator:
             admin_desc = (
-                "`!addpoints @joueur <reussies/echouees> <nb>`\n↳ Ajoute des points de succès ou d'échec à un citoyen.\n\n"
-                "`!delpoints @joueur <reussies/echouees> <nb>`\n↳ Retire des points de succès ou d'échec à un citoyen.\n\n"
-                "`!urgence <texte> pour dans <délai>`\n↳ Proclame un état de crise chronométré.\n\n"
-                "`!missionfinit @joueur` / `!missionechec @joueur`\n↳ Valide ou annule de force l'objectif d'un joueur."
+                "🚨 **GESTION DE CRISE**\n"
+                "`!urgence <texte> pour dans <délai>`\n↳ Proclame un état d'urgence chronométré (Ex: `pour dans 2h` ou `2 jours`).\n\n"
+                "`!missionfinit @joueur`\n↳ Valide définitivement l'urgence ou la quête du joueur.\n\n"
+                "`!missionechec @joueur`\n↳ Force l'échec d'un citoyen ou le révoque de l'urgence.\n\n"
+                "🛠️ **AJUSTEMENTS DES COUNTERS**\n"
+                "`!addpoints @joueur <reussies/echouees> <nombre>`\n↳ Ajoute manuellement des points à un membre.\n\n"
+                "`!delpoints @joueur <reussies/echouees> <nombre>`\n↳ Retire des points du compteur d'un membre.\n\n"
+                "📂 **BASE DE DONNÉES DES MISSIONS**\n"
+                "`!listemissions`\n↳ Liste l'intégralité des quêtes enregistrées par catégorie.\n\n"
+                "`!addmission <difficulté> <texte> pendant <temps>`\n↳ Enregistre un nouveau décret (Ex: `commune Miner du fer pendant 1h`).\n\n"
+                "`!delmission <difficulté> <numéro>`\n↳ Supprime définitivement une quête via son numéro de liste."
             )
-            embed.add_field(name="👑 HAUT COMMANDEMENT (ADMIN)", value=admin_desc, inline=False)
+            embed.add_field(name="👑 HAUT COMMANDEMENT (ADMINISTRATEUR)", value=admin_desc, inline=False)
             
         await message.channel.send(embed=embed)
         return
 
-    # --- NOUVELLE COMMANDE : AJOUTER DES POINTS MANUELLEMENT ---
+    # --- COMMANDES D'AJUSTEMENT DE POINTS ---
     if content_lower.startswith("!addpoints"):
         if not message.author.guild_permissions.administrator: return
         mots = content.split()
         if len(mots) < 4 or not message.mentions:
             await message.channel.send("❌ Usage : `!addpoints @joueur <reussies/echouees> <quantité>`")
             return
-        
         cible = message.mentions[0]
         type_point = mots[2].lower()
         if type_point not in ["reussies", "reussie", "echouees", "echouee"]:
-            await message.channel.send("❌ Tu dois spécifier `reussies` ou `echouees`.")
+            await message.channel.send("❌ Choisi entre `reussies` ou `echouees`.")
             return
         if type_point == "reussie": type_point = "reussies"
         if type_point == "echouee": type_point = "echouees"
-        
         try: qte = int(mots[3])
-        except ValueError:
-            await message.channel.send("❌ La quantité doit être un nombre entier.")
-            return
-
+        except ValueError: return
         profils = charger_profils()
         initialiser_profil(cible.id, profils)
         profils[str(cible.id)][type_point]["commune"] += qte
         sauvegarder_profils(profils)
-        
-        ajouter_historique(cible.id, profils, f"Ajustement manuel par {message.author.display_name} (+{qte})", "Modif Admin")
-        await message.channel.send(f"✅ Manuel : `{qte}` point(s) de type `{type_point}` ajouté(s) à {cible.mention} !")
+        ajouter_historique(cible.id, profils, f"Points ajoutés par l'administration (+{qte})", "Modif Admin")
+        await message.channel.send(f"✅ Ajustement fait : `+{qte}` {type_point} pour {cible.mention}.")
         return
 
-    # --- NOUVELLE COMMANDE : RETIRER DES POINTS MANUELLEMENT ---
     if content_lower.startswith("!delpoints"):
         if not message.author.guild_permissions.administrator: return
         mots = content.split()
         if len(mots) < 4 or not message.mentions:
             await message.channel.send("❌ Usage : `!delpoints @joueur <reussies/echouees> <quantité>`")
             return
-        
         cible = message.mentions[0]
         type_point = mots[2].lower()
         if type_point not in ["reussies", "reussie", "echouees", "echouee"]:
-            await message.channel.send("❌ Tu dois spécifier `reussies` ou `echouees`.")
+            await message.channel.send("❌ Choisi entre `reussies` ou `echouees`.")
             return
         if type_point == "reussie": type_point = "reussies"
         if type_point == "echouee": type_point = "echouees"
-        
         try: qte = int(mots[3])
-        except ValueError:
-            await message.channel.send("❌ La quantité doit être un nombre entier.")
-            return
-
+        except ValueError: return
         profils = charger_profils()
         initialiser_profil(cible.id, profils)
-        
-        # On s'assure de ne pas descendre en dessous de 0 points
         actuel = profils[str(cible.id)][type_point]["commune"]
         nouveau = max(0, actuel - qte)
         profils[str(cible.id)][type_point]["commune"] = nouveau
         sauvegarder_profils(profils)
-        
-        ajouter_historique(cible.id, profils, f"Ajustement manuel par {message.author.display_name} (-{qte})", "Modif Admin")
-        await message.channel.send(f"✅ Manuel : Retrait de `{qte}` point(s) de type `{type_point}` pour {cible.mention} ! (Nouveau score : `{nouveau}`)")
+        ajouter_historique(cible.id, profils, f"Points retirés par l'administration (-{qte})", "Modif Admin")
+        await message.channel.send(f"✅ Ajustement fait : Retrait de `{qte}` {type_point} pour {cible.mention}.")
         return
 
+    # --- ÉTAT DES MISSIONS ---
     if content_lower == "!missions_en_cours":
         msg = ""
         if urgence_active:
@@ -326,11 +325,12 @@ async def on_message(message):
         await message.channel.send(msg[:2000])
         return
 
+    # --- COMMANDE URGENCE ---
     if content_lower.startswith("!urgence"):
         if not message.author.guild_permissions.administrator: return
         texte_total = content[9:].strip()
-        if "pour dans" not in text_total.lower():
-            await message.channel.send("❌ Format : `!urgence <objectif> pour dans <délai>`")
+        if "pour dans" not in texte_total.lower():
+            await message.channel.send("❌ Format invalide. Exemple : `!urgence <texte> pour dans 2h`")
             return
         index_pour = texte_total.lower().rfind("pour dans")
         texte_urgence = texte_total[:index_pour].strip()
@@ -341,31 +341,38 @@ async def on_message(message):
             "texte": texte_urgence, "date_fin": datetime.now() + duree,
             "channel_id": message.channel.id, "membres": []
         }
-        await message.channel.send(f"🚨 **ALERTE GÉNÉRALE SUR MOCHA** 🚨\n🎯 **Objectif :** *\"{texte_urgence}\"*\n⏱️ **Délai :** `{delai_texte}`.\n👉 `!rejoindre_urgence` !")
+        await message.channel.send(f"🚨 **ALERTE GÉNÉRALE SUR MOCHA** 🚨\n🎯 **Objectif :** *\"{texte_urgence}\"*\n⏱️ **Délai accordé :** `{delai_texte}`.\n👉 Tapez `!rejoindre_urgence` pour participer !")
         return
 
     if content_lower == "!rejoindre_urgence":
-        if not urgence_active: return
+        if not urgence_active:
+            await message.channel.send("❌ Aucune urgence active.")
+            return
         if message.author.id in urgence_active["membres"]: return
-        if message.author.id in missions_actives: return
+        if message.author.id in missions_actives:
+            await message.channel.send("❌ Tu as déjà une mission standard active.")
+            return
         urgence_active["membres"].append(message.author.id)
-        await message.channel.send(f"✅ {message.author.mention} a rejoint l'urgence !")
+        await message.channel.send(f"✅ {message.author.mention} a rejoint le front d'urgence !")
         return
 
+    # --- DÉCLARATION FIN ---
     if content_lower == "!fin":
         joueur = message.author
         role_instructeur = discord.utils.get(message.guild.roles, name="Instructeur")
         mention_ins = role_instructeur.mention if role_instructeur else '@Instructeur'
         if urgence_active and joueur.id in urgence_active["membres"]:
-            await message.channel.send(f"📢 {mention_ins} ! {joueur.mention} déclare avoir fini l'URGENCE : *\"{urgence_active['texte']}\"* !")
+            await message.channel.send(f"📢 {mention_ins} ! {joueur.mention} déclare avoir terminé le décret d'URGENCE : *\"{urgence_active['texte']}\"* !")
             return
         if joueur.id in missions_actives:
             m_info = missions_actives[joueur.id]
             txt_cible = "L'escouade " + ", ".join([f"<@{uid}>" for uid in m_info["membres"]]) if len(m_info["membres"]) > 1 else joueur.mention
-            await message.channel.send(f"📢 {mention_ins} ! {txt_cible} déclare avoir fini : *\"{m_info['texte']}\"* !")
+            await message.channel.send(f"📢 {mention_ins} ! {txt_cible} déclare avoir fini la mission : *\"{m_info['texte']}\"* !")
             return
+        await message.channel.send("❌ Tu n'as aucune mission ou urgence en cours.")
         return
 
+    # --- VALIDATION FIN ET ÉCHEC CODES ---
     if content_lower.startswith("!missionfinit"):
         if not message.author.guild_permissions.administrator: return
         if not message.mentions: return
@@ -381,7 +388,7 @@ async def on_message(message):
             st_g = charger_stats_globales()
             st_g["urgences_reussies"] += 1
             sauvegarder_stats_globales(st_g)
-            await message.channel.send(f"👑 **URGENCE VALIDÉE !** Objectif accompli pour Mocha.")
+            await message.channel.send(f"👑 **URGENCE VALIDÉE AVEC SUCCÈS !** Félicitations à toute l'équipe.")
             urgence_active = {}
             return
             
@@ -395,8 +402,10 @@ async def on_message(message):
             sauvegarder_profils(profils)
             for uid in m_info["membres"]:
                 if uid in missions_actives: del missions_actives[uid]
-            await message.channel.send(f"✅ Mission standard validée !")
+            await message.channel.send(f"✅ Mission validée avec succès !")
             return
+        await message.channel.send("❌ Aucun objectif en cours trouvé pour ce joueur.")
+        return
 
     if content_lower.startswith("!missionechec"):
         if not message.author.guild_permissions.administrator: return
@@ -407,10 +416,10 @@ async def on_message(message):
             urgence_active["membres"].remove(cible.id)
             profils = charger_profils()
             initialiser_profil(cible.id, profils)
-            profils[str(cible.id)]["echouees"]["urgence"] += 1
+            profils[str(cible.id)][ "echouees"]["urgence"] += 1
             ajouter_historique(cible.id, profils, f"[URGENCE] {urgence_active['texte']}", "Échec")
             sauvegarder_profils(profils)
-            await message.channel.send(f"🚨 {cible.mention} retiré de l'urgence.")
+            await message.channel.send(f"🚨 {cible.mention} a été sorti de l'urgence pour faute lourde.")
             return
 
         if cible.id in missions_actives:
@@ -423,11 +432,16 @@ async def on_message(message):
             sauvegarder_profils(profils)
             for uid in m_info["membres"]:
                 if uid in missions_actives: del missions_actives[uid]
-            await message.channel.send(f"❌ Mission annulée de force.")
+            await message.channel.send(f"❌ Mission annulée de force par le Haut Commandement.")
             return
+        await message.channel.send("❌ Aucun objectif en cours trouvé pour ce joueur.")
+        return
 
+    # --- COMMANDES DE MISSIONS CITOYENS ---
     if content_lower.startswith("!mission_groupe"):
-        if urgence_active: return
+        if urgence_active:
+            await message.channel.send("🚨 **BLOCAGE** : Urgence nationale sur Mocha active !")
+            return
         mots = content_lower.split()
         if len(mots) < 3: return
         cat = mots[1]
@@ -440,13 +454,19 @@ async def on_message(message):
         escouade = [message.author.id]
         for m in message.mentions:
             if m.id not in escouade and not m.bot: escouade.append(m.id)
-        if len(escouade) < 2: return
+        if len(escouade) < 2:
+            await message.channel.send("❌ Mentionne au moins un collègue.")
+            return
 
         for uid in escouade:
-            if uid in missions_actives: return
+            if uid in missions_actives:
+                await message.channel.send("❌ Un membre du groupe est déjà occupé.")
+                return
 
         missions_dispo = charger_missions_fichier()
-        if not missions_dispo[cat]: return
+        if not missions_dispo[cat]:
+            await message.channel.send("❌ Aucune mission disponible dans cette catégorie.")
+            return
         mission_choisie = missions_dispo[cat].pop(random.randint(0, len(missions_dispo[cat]) - 1))
         réécrire_toutes_missions(missions_dispo)
 
@@ -457,11 +477,13 @@ async def on_message(message):
             "cat": cat, "channel_id": message.channel.id, "alerte_moitie": False, "alerte_un_quart": False, "membres": escouade
         }
         for uid in escouade: missions_actives[uid] = m_data
-        await message.channel.send(f"👥 **Mission d'escouade lancée !** *\"{mission_choisie['texte']}\"*")
+        await message.channel.send(f"👥 **Mission de groupe lancée !** *\"{mission_choisie['texte']}\"* (Délai : {mission_choisie['delai']})")
         return
 
     if content_lower.startswith("!mission"):
-        if urgence_active: return
+        if urgence_active:
+            await message.channel.send("🚨 **BLOCAGE** : Urgence nationale sur Mocha active !")
+            return
         joueur = message.author
         mots = content_lower.split()
         if len(mots) < 2: return
@@ -472,10 +494,14 @@ async def on_message(message):
         elif cat in ["royal", "royale"]: cat = "royal"
         else: return
 
-        if joueur.id in missions_actives: return
+        if joueur.id in missions_actives:
+            await message.channel.send("❌ Tu as déjà une mission en cours !")
+            return
 
         missions_dispo = charger_missions_fichier()
-        if not missions_dispo[cat]: return
+        if not missions_dispo[cat]:
+            await message.channel.send("❌ Plus de mission dispo dans cette catégorie.")
+            return
         mission_choisie = missions_dispo[cat].pop(random.randint(0, len(missions_dispo[cat]) - 1))
         réécrire_toutes_missions(missions_dispo)
 
@@ -485,9 +511,10 @@ async def on_message(message):
             "date_debut": datetime.now(), "date_fin": datetime.now() + duree, "duree_totale": duree,
             "cat": cat, "channel_id": message.channel.id, "alerte_moitie": False, "alerte_un_quart": False, "membres": [joueur.id]
         }
-        await message.channel.send(f"Mission : *\"{mission_choisie['texte']}\"*")
+        await message.channel.send(f"📜 **Mission attribuée :** *\"{mission_choisie['texte']}\"* (Délai : {mission_choisie['delai']})")
         return
 
+    # --- STATS GLOBALES ROYAUME ---
     if content_lower == "!stats_royaume":
         profils = charger_profils()
         st_g = charger_stats_globales()
@@ -511,34 +538,39 @@ async def on_message(message):
         await message.channel.send(embed=embed)
         return
 
+    # --- FILES MANAGEMENT ADMIN COMMANDS ---
     if content_lower.startswith("!listemissions") and message.author.guild_permissions.administrator:
         missions_dispo = charger_missions_fichier()
-        reponse = "⚜️ **ARCHIVES** ⚜️\n"
+        reponse = "⚜️ **ARCHIVES DES MISSIONS DISPONIBLES** ⚜️\n"
         for cat in ["commune", "moyenne", "difficile", "royal"]:
-            reponse += f"__**{cat.upper()} :**__\n"
-            if not missions_dispo[cat]: reponse += "*Vide*\n"
+            reponse += f"\n__**{cat.upper()} :**__\n"
+            if not missions_dispo[cat]: reponse += "*Aucune mission disponible*\n"
             else:
-                for i, m in enumerate(missions_dispo[cat], start=1): reponse += f"**{i}.** {m['texte']} *({m['delai']})*\n"
-        await message.channel.send(reponse)
+                for i, m in enumerate(missions_dispo[cat], start=1): reponse += f"**{i}.** {m['texte']} *(Délai d'origine : {m['delai']})*\n"
+        await message.channel.send(reponse[:2000])
         return
 
     if content_lower.startswith("!addmission") and message.author.guild_permissions.administrator:
         texte_total = content[11:].strip()
         mots = texte_total.split()
-        if len(mots) < 4 or "pendant" not in texte_total.lower(): return
+        if len(mots) < 4 or "pendant" not in texte_total.lower():
+            await message.channel.send("❌ Format incorrect. Exemple : `!addmission commune Miner 50 diamants pendant 2h`")
+            return
         cat = mots[0].lower()
         if cat in ["commune", "commun"]: cat = "commune"
         elif cat in ["moyenne", "moyen"]: cat = "moyenne"
         elif cat in ["difficile"]: cat = "difficile"
         elif cat in ["royal", "royale"]: cat = "royal"
-        else: return
+        else:
+            await message.channel.send("❌ Catégorie inconnue (`commune`, `moyenne`, `difficile`, `royal`).")
+            return
         parties = texte_total.split(None, 1)[1].strip()
         index_pendant = parties.lower().rfind("pendant")
         texte_mission = parties[:index_pendant].strip()
         delai = parties[index_pendant + 7:].strip()
         sauvegarder_mission_fichier(cat, texte_mission, delai)
         missions_dispo = charger_missions_fichier()
-        await message.channel.send(f"⚜️ **Ajoutée !** (`{cat}` : *{texte_mission}*)")
+        await message.channel.send(f"⚜️ **Mission ajoutée au catalogue !** (`{cat}` : *{texte_mission}*)")
         return
 
     if content_lower.startswith("!delmission") and message.author.guild_permissions.administrator:
@@ -552,12 +584,15 @@ async def on_message(message):
         try: numero = int(mots[2]) - 1
         except ValueError: return
         missions_dispo = charger_missions_fichier()
-        if numero >= 0 and numero < len(missions_dispo[cat]):
-            missions_dispo[cat].pop(numero)
+        if cat in missions_dispo and 0 <= numero < len(missions_dispo[cat]):
+            retiree = missions_dispo[cat].pop(numero)
             réécrire_toutes_missions(missions_dispo)
-            await message.channel.send("🗑️ Mission retirée.")
+            await message.channel.send(f"🗑️ Mission *\"{retiree['texte']}\"* supprimée avec succès.")
+        else:
+            await message.channel.send("❌ Numéro invalide ou mauvaise catégorie.")
         return
 
+    # --- PROFIL ET HISTORIQUE ---
     if content_lower.startswith("!profil"):
         cible = message.author
         if message.mentions: cible = message.mentions[0]
@@ -586,7 +621,7 @@ async def on_message(message):
             return
         msg = f"📜 **HISTORIQUE DES ORDRES DE {message.author.display_name.upper()}** 📜\n\n"
         for x in hist:
-            icon = "✅" if x["statut"] == "Succès" else "❌"
+            icon = "✅" if x["statut"] in ["Succès", "Modif Admin"] else "❌"
             msg += f"{icon} `[{x['date']}]` *\"{x['texte']}\"* -> **{x['statut']}**\n"
         await message.channel.send(msg)
         return
