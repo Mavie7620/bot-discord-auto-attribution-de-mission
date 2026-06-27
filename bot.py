@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 app = Flask('')
 
 @app.route('/')
-def home(): return "Le bot de l'Archi-Duc est vivant !"
+def home(): return "Le bot de Madagascar est vivant !"
 
 def run_web(): app.run(host='0.0.0.0', port=8080)
 def keep_alive():
@@ -84,7 +84,7 @@ def ajouter_historique(p_id, profils, texte, statut):
 def calculer_rang(stats):
     r = stats["reussies"]
     if r["commune"] >= 20 and r["moyenne"] >= 10 and r["difficile"] >= 5 and r["royal"] >= 1:
-        return "👑 Légende du Royaume"
+        return "👑 Légende de Madagascar"
     if r["commune"] >= 10 and r["moyenne"] >= 5 and r["difficile"] >= 1:
         return "⚔️ Vétéran"
     if r["commune"] >= 5:
@@ -109,11 +109,11 @@ missions_actives = {}
 urgence_active = {}
 
 TEXTE_ECHEC = (
-    "⚜️ **𝕾𝖞𝖘𝖙𝖊̀𝖒𝖊 𝖉𝖊 𝕸𝖎𝖘𝖘𝖎𝖔𝖓𝖘 𝖉𝖚 𝕽𝖔𝖞𝖆𝖚𝖒𝖊** ⚜️\n"
+    "⚜️ **𝕾𝖞𝖘𝖙𝖊̀𝖒𝖊 𝖉𝖊 𝕸𝖎𝖘𝖘𝖎𝖔𝖓𝖘 𝖉𝖊 𝕸𝖆𝖉𝖆𝖌𝖆𝖘𝖈𝖆𝖗** ⚜️\n"
     "**D'après l'article Ⅴ — Rappel :**\n"
     "- **Refuser ou abandonner une mission attribuée sans raison valable peut être sanctionné.**\n"
-    "- *Le Royaume récompense l'investissement et la persévérance.*\n"
-    "- *Les missions constituent l'un des principaux moyens de progresser au sein du Royaume.*"
+    "- *L'État récompense l'investissement et la persévérance.*\n"
+    "- *Les missions constituent l'un des principaux moyens de progresser au sein de Madagascar.*"
 )
 
 @tasks.loop(seconds=1)
@@ -140,7 +140,7 @@ async def verifier_temps_missions():
             if channel_urg:
                 mentions = ", ".join([f"<@{uid}>" for uid in urgence_active["membres"]]) if urgence_active["membres"] else "Personne"
                 await channel_urg.send(
-                    f"🚨 **CRISE NATIONALE SUR MOCHA** 🚨\n"
+                    f"🚨 **CRISE NATIONALE SUR MOCHA — MADAGASCAR** 🚨\n"
                     f"Le délai du décret d'urgence est dépassé ! L'objectif a échoué.\n"
                     f"Citoyens impactés : {mentions}\n"
                     f"📉 *La réputation et l'organisation du pays en pâtissent.*"
@@ -202,7 +202,7 @@ async def verifier_temps_missions():
 @bot.event
 async def on_ready():
     if not verifier_temps_missions.is_running(): verifier_temps_missions.start()
-    print("Bot MADAmission Pro — Correctif complet appliqué !")
+    print("Bot MADAmission Pro — Correctif Madagascar appliqué sur Mocha !")
 
 @bot.event
 async def on_message(message):
@@ -211,12 +211,12 @@ async def on_message(message):
     content = message.content.strip()
     content_lower = content.lower()
 
-    # --- CORRECTION DU !AIDE (IL Y A TOUT SANS EXCEPTION MAINTENANT) ---
+    # --- ENCADREMENT DU !AIDE / !HELP ---
     if content_lower in ["!aide", "!help"]:
-        embed = discord.Embed(title="⚜️ TABLEAU DES ORDRES DE MOCHA ⚜️", color=discord.Color.gold())
+        embed = discord.Embed(title="⚜️ TABLEAU DES ORDRES DE MADAGASCAR ⚜️", color=discord.Color.gold())
         
         citoyen_desc = (
-            "⚔️ **SYSTÈME DE QUÊTES COMPLET**\n"
+            "⚔️ **%s**\n" % "SYSTÈME DE QUÊTES COMPLET" +
             "`!mission <difficulté>`\n↳ Pioche une mission en solo (`commune`, `moyenne`, `difficile`, `royal`).\n\n"
             "`!mission_groupe <difficulté> @joueur1...`\n↳ Déclenche une mission collective avec ton escouade.\n\n"
             "`!rejoindre_urgence`\n↳ Prends les armes et inscris-toi sur le décret d'urgence national.\n\n"
@@ -225,7 +225,7 @@ async def on_message(message):
             "📊 **INFORMATIONS ET RANGS**\n"
             "`!profil [@joueur]`\n↳ Regarde ton rang, tes victoires, tes échecs et ton taux de réussite.\n\n"
             "`!historique`\n↳ Affiche le parchemin de tes 5 dernières actions accomplies.\n\n"
-            "`!stats_royaume`\n↳ Regarde les statistiques globales de Mocha (efficacité, réussite, crises)."
+            "`!stats_royaume`\n↳ Regarde les statistiques globales de Madagascar (efficacité, réussite, crises)."
         )
         embed.add_field(name="👥 ESPACE DES CITOYENS", value=citoyen_desc, inline=False)
         
@@ -306,7 +306,7 @@ async def on_message(message):
             heures, reste = divmod(t_restant.seconds, 3600)
             minutes, _ = divmod(reste, 60)
             mentions = ", ".join([f"<@{uid}>" for uid in urgence_active["membres"]]) if urgence_active["membres"] else "Aucun volontaire"
-            msg += f"🚨 **DÉCRET D'URGENCE NATIONAL ACTIF** 🚨\n📜 *\"{urgence_active['texte']}\"*\n⏱️ Temps restant : `{jours}j {heures}h {minutes}m`\n👥 Volontaires : {mentions}\n\n"
+            msg += f"🚨 **DÉCRET D'URGENCE NATIONAL — MADAGASCAR** 🚨\n📜 *\"{urgence_active['texte']}\"*\n⏱️ Temps restant : `{jours}j {heures}h {minutes}m`\n👥 Volontaires : {mentions}\n\n"
         
         if not missions_actives:
             msg += "⚪ Aucune mission standard n'est active actuellement au sein du pays."
@@ -334,14 +334,14 @@ async def on_message(message):
             return
         index_pour = texte_total.lower().rfind("pour dans")
         texte_urgence = texte_total[:index_pour].strip()
-        delai_texte = texte_total[index_pour + 9:].strip()
+        delai_texte = text_total[index_pour + 9:].strip() if 'text_total' in locals() else texte_total[index_pour + 9:].strip()
         
         duree = extraire_duree(delai_texte)
         urgence_active = {
             "texte": texte_urgence, "date_fin": datetime.now() + duree,
             "channel_id": message.channel.id, "membres": []
         }
-        await message.channel.send(f"🚨 **ALERTE GÉNÉRALE SUR MOCHA** 🚨\n🎯 **Objectif :** *\"{texte_urgence}\"*\n⏱️ **Délai accordé :** `{delai_texte}`.\n👉 Tapez `!rejoindre_urgence` pour participer !")
+        await message.channel.send(f"🚨 **ALERTE GÉNÉRALE SUR MOCHA — MADAGASCAR** 🚨\n🎯 **Objectif :** *\"{texte_urgence}\"*\n⏱️ **Délai accordé :** `{delai_texte}`.\n👉 Tapez `!rejoindre_urgence` pour participer !")
         return
 
     if content_lower == "!rejoindre_urgence":
@@ -353,7 +353,7 @@ async def on_message(message):
             await message.channel.send("❌ Tu as déjà une mission standard active.")
             return
         urgence_active["membres"].append(message.author.id)
-        await message.channel.send(f"✅ {message.author.mention} a rejoint le front d'urgence !")
+        await message.channel.send(f"✅ {message.author.mention} a rejoint le front d'urgence pour Madagascar !")
         return
 
     # --- DÉCLARATION FIN ---
@@ -388,7 +388,7 @@ async def on_message(message):
             st_g = charger_stats_globales()
             st_g["urgences_reussies"] += 1
             sauvegarder_stats_globales(st_g)
-            await message.channel.send(f"👑 **URGENCE VALIDÉE AVEC SUCCÈS !** Félicitations à toute l'équipe.")
+            await message.channel.send(f"👑 **URGENCE VALIDÉE AVEC SUCCÈS !** Félicitations à toute l'équipe de Madagascar.")
             urgence_active = {}
             return
             
@@ -416,7 +416,7 @@ async def on_message(message):
             urgence_active["membres"].remove(cible.id)
             profils = charger_profils()
             initialiser_profil(cible.id, profils)
-            profils[str(cible.id)][ "echouees"]["urgence"] += 1
+            profils[str(cible.id)]["echouees"]["urgence"] += 1
             ajouter_historique(cible.id, profils, f"[URGENCE] {urgence_active['texte']}", "Échec")
             sauvegarder_profils(profils)
             await message.channel.send(f"🚨 {cible.mention} a été sorti de l'urgence pour faute lourde.")
@@ -440,7 +440,7 @@ async def on_message(message):
     # --- COMMANDES DE MISSIONS CITOYENS ---
     if content_lower.startswith("!mission_groupe"):
         if urgence_active:
-            await message.channel.send("🚨 **BLOCAGE** : Urgence nationale sur Mocha active !")
+            await message.channel.send("🚨 **BLOCAGE** : Urgence nationale sur Mocha — Madagascar active !")
             return
         mots = content_lower.split()
         if len(mots) < 3: return
@@ -482,7 +482,7 @@ async def on_message(message):
 
     if content_lower.startswith("!mission"):
         if urgence_active:
-            await message.channel.send("🚨 **BLOCAGE** : Urgence nationale sur Mocha active !")
+            await message.channel.send("🚨 **BLOCAGE** : Urgence nationale sur Mocha — Madagascar active !")
             return
         joueur = message.author
         mots = content_lower.split()
@@ -514,7 +514,7 @@ async def on_message(message):
         await message.channel.send(f"📜 **Mission attribuée :** *\"{mission_choisie['texte']}\"* (Délai : {mission_choisie['delai']})")
         return
 
-    # --- STATS GLOBALES ROYAUME ---
+    # --- STATS GLOBALES MADAGASCAR ---
     if content_lower == "!stats_royaume":
         profils = charger_profils()
         st_g = charger_stats_globales()
@@ -530,7 +530,7 @@ async def on_message(message):
         t_tot = t_reus + t_eche
         t_tx = int((t_reus / t_tot) * 100) if t_tot > 0 else 100
         
-        embed = discord.Embed(title="⚜️ ARCHIVES DE MOCHA — STATISTIQUES ⚜️", color=discord.Color.dark_gold())
+        embed = discord.Embed(title="⚜️ ARCHIVES DE MADAGASCAR — STATISTIQUES ⚜️", color=discord.Color.dark_gold())
         embed.add_field(name="🌍 Total Décrets Tentés", value=f"`{t_tot}` missions", inline=True)
         embed.add_field(name="📈 Efficacité Citoyenne", value=f"`{t_tx}%` de réussite", inline=True)
         embed.add_field(name="🚨 Crises d'Urgence", value=f"✅ Réc: `{st_g['urgences_reussies']}` | ❌ Éch: `{st_g['urgences_echouees']}`", inline=False)
@@ -552,7 +552,7 @@ async def on_message(message):
 
     if content_lower.startswith("!addmission") and message.author.guild_permissions.administrator:
         texte_total = content[11:].strip()
-        mots = texte_total.split()
+        mots = text_total.split() if 'text_total' in locals() else texte_total.split()
         if len(mots) < 4 or "pendant" not in texte_total.lower():
             await message.channel.send("❌ Format incorrect. Exemple : `!addmission commune Miner 50 diamants pendant 2h`")
             return
