@@ -7,21 +7,16 @@ from threading import Thread
 from flask import Flask
 from datetime import datetime, timedelta
 
-# --- CONFIGURATION DU SERVEUR COMPAGNON (KEEP ALIVE) ---
 app = Flask('')
 
 @app.route('/')
-def home(): 
-    return "Le bot de Madagascar est vivant !"
+def home(): return "Le bot de Madagascar est vivant !"
 
-def run_web(): 
-    app.run(host='0.0.0.0', port=8080)
-
+def run_web(): app.run(host='0.0.0.0', port=8080)
 def keep_alive():
     t = Thread(target=run_web)
     t.start()
 
-# --- INITIALISATION DU BOT DISCORD ---
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
@@ -31,7 +26,6 @@ FILE_NAME = "missions.txt"
 PROFILES_FILE = "profils.txt"
 STATS_GLOBAL_FILE = "stats_globales.txt"
 
-# --- GESTION DES FICHIERS ET DONNÉES ---
 def charger_missions_fichier():
     structure = {"commune": [], "moyenne": [], "difficile": [], "royal": []}
     if not os.path.exists(FILE_NAME): return structure
@@ -69,7 +63,6 @@ def charger_stats_globales():
 def sauvegarder_stats_globales(stats):
     with open(STATS_GLOBAL_FILE, "w", encoding="utf-8") as f: json.dump(stats, f, indent=4)
 
-# --- SYSTÈME DE RANGS ET HISTORIQUE ---
 def initialiser_profil(p_id, profils):
     s_id = str(p_id)
     if s_id not in profils:
@@ -123,8 +116,7 @@ TEXTE_ECHEC = (
     "- *Les missions constituent l'un des principaux moyens de progresser au sein de Madagascar.*"
 )
 
-# --- BOUCLE DE VÉRIFICATION DES TIMERS ---
-@tasks.loop(seconds=5)
+@tasks.loop(seconds=1)
 async def verifier_temps_missions():
     global urgence_active
     maintenant = datetime.now()
@@ -214,7 +206,6 @@ async def on_ready():
     if not verifier_temps_missions.is_running(): verifier_temps_missions.start()
     print("Bot MADAmission Pro — Retour de mission activé pour Madagascar !")
 
-# --- ENREGISTREMENT ET ÉCOUTE DES COMMANDES ---
 @bot.event
 async def on_message(message):
     global missions_dispo, urgence_active
@@ -222,7 +213,7 @@ async def on_message(message):
     content = message.content.strip()
     content_lower = content.lower()
 
-    # --- !AIDE / !HELP ---
+    # --- ENCADREMENT DU !AIDE / !HELP ---
     if content_lower in ["!aide", "!help"]:
         embed = discord.Embed(title="⚜️ TABLEAU DES ORDRES DE MADAGASCAR ⚜️", color=discord.Color.gold())
         
@@ -259,7 +250,7 @@ async def on_message(message):
         await message.channel.send(embed=embed)
         return
 
-    # --- MANAGEMENT DES POINTS ---
+    # --- COMMANDES D'AJUSTEMENT DE POINTS ---
     if content_lower.startswith("!addpoints"):
         if not message.author.guild_permissions.administrator: return
         mots = content.split()
@@ -348,7 +339,7 @@ async def on_message(message):
         await message.channel.send(msg[:2000])
         return
 
-    # --- COMMANDES D'URGENCE ---
+    # --- COMMANDE URGENCE ---
     if content_lower.startswith("!urgence"):
         if not message.author.guild_permissions.administrator: return
         texte_total = content[9:].strip()
@@ -382,7 +373,7 @@ async def on_message(message):
         await message.channel.send(f"✅ {message.author.mention} a rejoint le front d'urgence pour Madagascar !")
         return
 
-    # --- DECLARATION DE FIN ---
+    # --- DECLARATION FIN ---
     if content_lower == "!fin":
         joueur = message.author
         role_instructeur = discord.utils.get(message.guild.roles, name="Instructeur")
@@ -407,7 +398,7 @@ async def on_message(message):
         await message.channel.send("❌ Tu n'as aucune mission ou urgence en cours.")
         return
 
-    # --- VALIDATIONS ET ÉCHECS ---
+    # --- VALIDATION FIN ET ÉCHEC CODES ---
     if content_lower.startswith("!missionfinit"):
         if not message.author.guild_permissions.administrator: return
         if not message.mentions: return
@@ -488,7 +479,7 @@ async def on_message(message):
         await message.channel.send("❌ Aucun objectif en cours trouvé pour ce joueur.")
         return
 
-    # --- MISSIONS CITOYENS ---
+    # --- COMMANDES DE MISSIONS CITOYENS ---
     if content_lower.startswith("!mission_groupe"):
         if urgence_active:
             await message.channel.send("🚨 **BLOCAGE** : Urgence nationale sur Mocha — Madagascar active !")
@@ -565,7 +556,7 @@ async def on_message(message):
         await message.channel.send(f"📜 **Mission attribuée :** *\"{mission_choisie['texte']}\"* (Délai : {mission_choisie['delai']})")
         return
 
-    # --- STATS GLOBALES ---
+    # --- STATS GLOBALES MADAGASCAR ---
     if content_lower == "!stats_royaume":
         profils = charger_profils()
         st_g = charger_stats_globales()
@@ -589,7 +580,7 @@ async def on_message(message):
         await message.channel.send(embed=embed)
         return
 
-    # --- COMMANDES ADMINISTRATION (FILES MANAGEMENT) ---
+    # --- FILES MANAGEMENT ADMIN COMMANDS ---
     if content_lower.startswith("!listemissions") and message.author.guild_permissions.administrator:
         missions_dispo = charger_missions_fichier()
         reponse = "⚜️ **ARCHIVES DES MISSIONS DISPONIBLES** ⚜️\n"
@@ -603,7 +594,7 @@ async def on_message(message):
 
     if content_lower.startswith("!addmission") and message.author.guild_permissions.administrator:
         texte_total = content[11:].strip()
-        mots = texte_total.split()
+        mots = texte_total.split() # Correction : texte_total au lieu de text_total
         if len(mots) < 4 or "pendant" not in texte_total.lower():
             await message.channel.send("❌ Format incorrect. Exemple : `!addmission commune Miner 50 diamants pendant 2h`")
             return
@@ -643,6 +634,49 @@ async def on_message(message):
             await message.channel.send("❌ Numéro invalide ou mission introuvable.")
         return
 
-# --- DÉMARRAGE SYNCHRONISÉ DU SERVEUR ET DU BOT ---
-keep_alive()  # Lance Flask en tâche de fond pour Render
-bot.run("TON_TOKEN_ICI")  # Remplace par ton vrai token Discord
+    # --- CONSULTATION PROFIL ---
+    if content_lower.startswith("!profil"):
+        cible = message.mentions[0] if message.mentions else message.author
+        profils = charger_profils()
+        initialiser_profil(cible.id, profils)
+        st = profils[str(cible.id)]
+        
+        tot_r = sum(st["reussies"].values())
+        tot_e = sum(st["echouees"].values())
+        total = tot_r + tot_e
+        tx = int((tot_r / total) * 100) if total > 0 else 100
+        rang = calculer_rang(st)
+
+        embed = discord.Embed(title=f"📜 PROFIL DE CITOYEN — {cible.name}", color=discord.Color.blue())
+        embed.add_field(name="🎖️ Rang Militaire", value=f"**{rang}**", inline=False)
+        embed.add_field(name="✅ Quêtes Réussies", value=f"`{tot_r}` accomplies", inline=True)
+        embed.add_field(name="❌ Échecs / Malus", value=f"`{tot_e}` échouées", inline=True)
+        embed.add_field(name="📈 Ratio de Succès", value=f"`{tx}%` d'efficacité", inline=True)
+        
+        details = "\n".join([f"• **{k.upper()}** : Rec: `{v}` | Éch: `{st['echouees'].get(k,0)}`" for k, v in st["reussies"].items()])
+        embed.add_field(name="📊 Détail par catégories", value=details, inline=False)
+        await message.channel.send(embed=embed)
+        return
+
+    # --- CONSULTATION HISTORIQUE ---
+    if content_lower == "!historique":
+        profils = charger_profils()
+        initialiser_profil(message.author.id, profils)
+        hist = profils[str(message.author.id)]["historique"]
+        if not hist:
+            await message.channel.send("📜 Ton parchemin d'historique est vierge pour le moment.")
+            return
+        reponse = f"📜 **HISTORIQUE DES 5 DERNIÈRES ACTIONS DE {message.author.mention} :**\n"
+        for i, h in enumerate(hist, start=1):
+            emoji = "✅" if h["statut"] == "Succès" else "❌" if h["statut"] == "Échec" else "⚙️"
+            reponse += f"{emoji} **{i}. [{h['date']}]** {h['texte']} — *{h['statut']}*\n"
+        await message.channel.send(reponse)
+        return
+
+# Démarrage du keep-alive web pour le hosting et lancement du bot
+keep_alive()
+TOKEN = os.environ.get("DISCORD_TOKEN") # Assure-toi d'avoir configuré ton token dans tes variables d'environnement
+if TOKEN:
+    bot.run(TOKEN)
+else:
+    print("Erreur : Aucun token trouvé sous le nom 'DISCORD_TOKEN'.")
