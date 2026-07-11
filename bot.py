@@ -99,6 +99,12 @@ def verifier_permissions_staff(user):
     roles_noms = [r.name for r in user.roles]
     return user.guild_permissions.administrator or "[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]" in roles_noms or "Palais Royal" in roles_noms
 
+async def envoyer_double_notification(guild, msg_ticket, msg_missions):
+    salon_missions = discord.utils.get(guild.text_channels, name="〔⚔️〕missions")
+    if salon_missions:
+        try: await salon_missions.send(msg_missions)
+        except: pass
+
 async def action_accepter_mission(joueur_id, channel):
     if joueur_id in missions_actives:
         m_info = missions_actives[joueur_id]
@@ -108,7 +114,10 @@ async def action_accepter_mission(joueur_id, channel):
         ajouter_historique(joueur_id, profils, m_info["texte"], "Succès")
         sauvegarder_profils(profils)
         del missions_actives[joueur_id]
-        await channel.send("✅ **Mission Validée** ! L'objectif est consigné comme réussi dans le grand registre.")
+        
+        msg = "✅ **Mission Validée** ! L'objectif est consigné comme réussi dans le grand registre."
+        await channel.send(msg)
+        await envoyer_double_notification(channel.guild, msg, f"✅ **Mission accomplie** par <@{joueur_id}> : *\"{m_info['texte']}\"*")
         return True
     return False
 
@@ -121,7 +130,10 @@ async def action_refuser_mission(joueur_id, channel):
         ajouter_historique(joueur_id, profils, m_info["texte"], "Échec")
         sauvegarder_profils(profils)
         del missions_actives[joueur_id]
-        await channel.send(f"↩️ **Mission Terminée (Refusé/Échec)**.\n\n{TEXTE_ECHEC}")
+        
+        msg = f"↩️ **Mission Terminée (Refusé/Échec)**.\n\n{TEXTE_ECHEC}"
+        await channel.send(msg)
+        await envoyer_double_notification(channel.guild, msg, f"❌ **Mission échouée/refusée** pour <@{joueur_id}> : *\"{m_info['texte']}\"*")
         return True
     return False
 
@@ -130,10 +142,15 @@ async def action_demander_preuve(joueur_id, channel, guild):
         member = guild.get_member(joueur_id)
         if member:
             await channel.set_permissions(member, read_messages=True, send_messages=True)
-        await channel.send(
-            f"⚠️ <@{joueur_id}>, **un Instructeur demande des preuves de ta réussite.**\n"
-            "Merci d'envoyer une capture d'écran (screen) ici-même afin qu'elle soit inspectée."
-        )
+            
+        role_instructeur = discord.utils.get(guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]")
+        mention_ins = role_instructeur.mention if role_instructeur else "@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]"
+        
+        msg_ticket = f"⚠️ <@{joueur_id}>, **{mention_ins} veuillez nous fournire une preuve de l'acomplissement de votre mission**"
+        msg_log_missions = f"📸 {mention_ins} — Une demande de preuve a été envoyée à <@{joueur_id}> dans son ticket {channel.mention}."
+        
+        await channel.send(msg_ticket)
+        await envoyer_double_notification(guild, msg_ticket, msg_log_missions)
         return True
     return False
 
@@ -163,10 +180,15 @@ async def verifier_temps_missions():
             sauvegarder_profils(profils)
 
             role_instructeur = discord.utils.get(channel.guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]")
-            await channel.send(
+            mention_ins = role_instructeur.mention if role_instructeur else '@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]'
+            
+            msg_echec = (
                 f"🚨 **MISSION ÉCHOUÉE** 🚨\nLe temps imparti est écoulé ! La mission de <@{joueur_id}> a échoué.\n"
-                f"📢 {role_instructeur.mention if role_instructeur else '@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]'}, un citoyen a failli à son devoir.\n\n{TEXTE_ECHEC}"
+                f"📢 {mention_ins}, un citoyen a failli à son devoir.\n\n{TEXTE_ECHEC}"
             )
+            await channel.send(msg_echec)
+            await envoyer_double_notification(channel.guild, msg_echec, f"🚨 <@{joueur_id}> a dépassé le temps imparti pour sa mission : *\"{m_info['texte']}\"* !")
+            
         elif temps_restant <= (duree_totale / 4) and not m_info["alerte_un_quart"]:
             m_info["alerte_un_quart"] = True
             m_info["alerte_moitie"] = True
@@ -190,8 +212,14 @@ class VueBoutonTicket(discord.ui.View):
         guild = interaction.guild
         joueur = interaction.user
         
+        # Vérification stricte basée sur le nom de la catégorie parente du salon
+        nom_categorie_requis = "⚜️ == [ 𝕸𝖎𝖘𝖘𝖎𝖔𝖓𝖘 ] =="
+        if not interaction.channel.category or interaction.channel.category.name != nom_categorie_requis:
+            await interaction.response.send_message(f"❌ Les tickets s'ouvrent uniquement dans les salons de la catégorie **{nom_categorie_requis}** !", ephemeral=True)
+            return
+        
         if joueur.id in missions_actives:
-            await interaction.response.send_message("❌ Tu as déjà une mission en cours ! Termine-la avant d'ouvrir un autre ordre.", ephemeral=True)
+            await interaction.response.send_message("Vous ne pouvez obtenir qu'une seule mission a la fois !", ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -209,12 +237,12 @@ class VueBoutonTicket(discord.ui.View):
         if role_palais: overwrites[role_palais] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
         nom_salon = f"🪖-ordre-{joueur.name}"
-        ticket_channel = await guild.create_text_channel(name=nom_salon, overwrites=overwrites)
+        # On crée le ticket à l'intérieur de la même catégorie pour qu'il s'y place directement
+        ticket_channel = await guild.create_text_channel(name=nom_salon, overwrites=overwrites, category=interaction.channel.category)
         
-        salon_missions = discord.utils.get(guild.text_channels, name="〔⚔️〕missions")
-        if salon_missions:
-            mention_ins = role_instructeur.mention if role_instructeur else "@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]"
-            await salon_missions.send(f"⚔️ {mention_ins} — Un nouveau ticket d'ordre vient d'être initié par {joueur.mention} dans {ticket_channel.mention} !")
+        mention_ins = role_instructeur.mention if role_instructeur else "@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]"
+        msg_notif = f"⚔️ {mention_ins} — Un nouveau ticket d'ordre vient d'être initié par {joueur.mention} dans {ticket_channel.mention} !"
+        await envoyer_double_notification(guild, msg_notif, msg_notif)
 
         embed_ticket = discord.Embed(
             title="⚜️ CENTRE DE SÉLECTION DES DÉCRETS ⚜️",
@@ -235,7 +263,7 @@ class VueChoixDifficulte(discord.ui.View):
             return
             
         if self.joueur_id in missions_actives:
-            await interaction.response.send_message("❌ Tu as déjà accepté une mission !", ephemeral=True)
+            await interaction.response.send_message("Vous ne pouvez obtenir qu'une seule mission a la fois !", ephemeral=True)
             return
 
         global missions_dispo
@@ -309,11 +337,13 @@ class VueGestionJoueurMission(discord.ui.View):
         mention_ins = role_instructeur.mention if role_instructeur else '@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]'
 
         await interaction.channel.set_permissions(interaction.user, read_messages=True, send_messages=False)
-        await interaction.channel.send(
+        
+        msg_fin = (
             f"📢 {mention_ins} ! {interaction.user.mention} déclare avoir fini sa mission via l'interface : *\"{m_info['texte']}\"* !\n"
-            f"⏱️ **Le chrono est mis en pause.** Choisissez l'action appropriée :",
-            view=VueEvaluationMission(self.joueur_id)
+            f"⏱️ **Le chrono est mis en pause.** Choisissez l'action appropriée :"
         )
+        await interaction.channel.send(msg_fin, view=VueEvaluationMission(self.joueur_id))
+        await envoyer_double_notification(interaction.guild, msg_fin, f"📢 {mention_ins} — <@{self.joueur_id}> demande une validation pour : *\"{m_info['texte']}\"* dans {interaction.channel.mention}")
 
     @discord.ui.button(label="❌ Abandonner", style=discord.ButtonStyle.danger, custom_id="joueur_abandonner_mission")
     async def joueur_abandonner(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -368,7 +398,7 @@ class VueEvaluationMission(discord.ui.View):
 async def on_ready():
     if not verifier_temps_missions.is_running(): verifier_temps_missions.start()
     bot.add_view(VueBoutonTicket())
-    print("Bot MADAmission Pro — Missions infinies (non-consommables) prêtes !")
+    print("Bot MADAmission Pro — Double notifications & restrictions de catégories prêtes !")
 
 @bot.event
 async def on_message(message):
@@ -380,10 +410,9 @@ async def on_message(message):
     if message.channel.name and "🪖-ordre-" in message.channel.name and message.attachments:
         joueur_id = message.author.id
         if joueur_id in missions_actives and missions_actives[joueur_id].get("en_attente", False):
-            await message.channel.send(
-                "📸 **Preuve reçue.** En attente de l'analyse finale de l'administration :",
-                view=VueEvaluationMission(joueur_id)
-            )
+            msg_p = "📸 **Preuve reçue.** En attente de l'analyse finale de l'administration :"
+            await message.channel.send(msg_p, view=VueEvaluationMission(joueur_id))
+            await envoyer_double_notification(message.guild, msg_p, f"📸 Preuve d'accomplissement déposée par <@{joueur_id}> dans {message.channel.mention}.")
 
     if content_lower in ["!aide", "!help"]:
         embed = discord.Embed(title="⚜️ TABLEAU DES ORDRES DE MADAGASCAR ⚜️", color=discord.Color.gold())
@@ -472,11 +501,12 @@ async def on_message(message):
                 m_info["moment_gel"] = datetime.now()
                 
             await message.channel.set_permissions(joueur, read_messages=True, send_messages=False)
-            await message.channel.send(
+            msg_comp = (
                 f"📢 {mention_ins} ! {joueur.mention} déclare avoir fini sa mission : *\"{m_info['texte']}\"* !\n"
-                f"⏱️ **Le chrono est mis en pause.** Choisissez l'action appropriée :",
-                view=VueEvaluationMission(joueur.id)
+                f"⏱️ **Le chrono est mis en pause.** Choisissez l'action appropriée :"
             )
+            await message.channel.send(msg_comp, view=VueEvaluationMission(joueur.id))
+            await envoyer_double_notification(message.guild, msg_comp, f"📢 {mention_ins} — <@{joueur.id}> a fini sa mission : *\"{m_info['texte']}\"* dans {message.channel.mention}")
             return
             
         await message.channel.send("❌ Tu n'as aucune mission active en cours.")
