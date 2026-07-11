@@ -100,7 +100,8 @@ def verifier_permissions_staff(user):
     return user.guild_permissions.administrator or "[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]" in roles_noms or "Palais Royal" in roles_noms
 
 async def envoyer_double_notification(guild, msg_ticket, msg_missions, view=None):
-    salon_missions = discord.utils.get(guild.text_channels, name="〔⚔️〕missions")
+    # Changement effectué ici pour cibler le salon "validation-mission"
+    salon_missions = discord.utils.get(guild.text_channels, name="validation-mission")
     if salon_missions:
         try: await salon_missions.send(msg_missions, view=view)
         except: pass
