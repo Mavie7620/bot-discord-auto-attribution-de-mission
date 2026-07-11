@@ -141,10 +141,118 @@ async def verifier_temps_missions():
     for joueur_id in missions_a_retirer:
         if joueur_id in missions_actives: del missions_actives[joueur_id]
 
+# --- VUES INTERACTIVES (BOUTONS DISCORD) ---
+
+class VueBoutonTicket(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None) # Persistant même après redémarrage du bot
+
+    @discord.ui.button(label="🎫 Ouvrir un Ticket de Mission", style=discord.欵uttonStyle.green, custom_id="btn_ouvrir_ticket")
+    async def ouvrir_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
+        guild = interaction.guild
+        joueur = interaction.user
+        
+        # Vérification si le joueur a déjà une mission
+        if joueur.id in missions_actives:
+            await interaction.response.send_message("❌ Tu as déjà une mission en cours ! Termine-la avant d'ouvrir un autre ordre.", ephemeral=True)
+            return
+
+        await interaction.response.defer(ephemeral=True)
+
+        # Permissions privées pour le ticket
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            joueur: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+            guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        }
+        
+        # On essaie de ping le rôle Instructeur pour qu'il voie le salon
+        role_instructeur = discord.utils.get(guild.roles, name="Instructeur")
+        if role_instructeur:
+            overwrites[role_instructeur] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+
+        # Création du salon
+        nom_salon = f"🪖-ordre-{joueur.name}"
+        ticket_channel = await guild.create_text_channel(name=nom_salon, overwrites=overwrites)
+        
+        # Envoi de l'interface des choix dans le ticket
+        embed_ticket = discord.Embed(
+            title="⚜️ CENTRE DE SÉLECTION DES DÉCRETS ⚜️",
+            description=f"Bienvenue {joueur.mention}.\nChoisis la difficulté de l'objectif que tu souhaites accomplir aujourd'hui pour Madagascar.",
+            color=discord.Color.dark_red()
+        )
+        await ticket_channel.send(embed=embed_ticket, view=VueChoixDifficulte(joueur.id))
+        await interaction.followup.send(f"✅ Ton ticket a été créé ici : {ticket_channel.mention}", ephemeral=True)
+
+class VueChoixDifficulte(discord.ui.View):
+    def __init__(self, joueur_id):
+        super().__init__(timeout=600)
+        self.joueur_id = joueur_id
+
+    async def attribuer_mission_bouton(self, interaction: discord.Interaction, cat: str):
+        if interaction.user.id != self.joueur_id:
+            await interaction.response.send_message("❌ Ce ticket ne t'appartient pas.", ephemeral=True)
+            return
+            
+        if self.joueur_id in missions_actives:
+            await interaction.response.send_message("❌ Tu as déjà accepté une mission !", ephemeral=True)
+            return
+
+        global missions_dispo
+        missions_dispo = charger_missions_fichier()
+        if not missions_dispo[cat]:
+            await interaction.response.send_message(f"❌ Plus de mission disponible dans la catégorie `{cat.upper()}`.", ephemeral=True)
+            return
+
+        mission_choisie = missions_dispo[cat].pop(random.randint(0, len(missions_dispo[cat]) - 1))
+        réécrire_toutes_missions(missions_dispo)
+
+        duree = extraire_duree(mission_choisie["delai"])
+        date_fin = datetime.now() + duree
+        
+        # Timestamp Discord pour le temps réel interactif (<t:TIMESTAMP:R>)
+        timestamp_discord = int(date_fin.timestamp())
+
+        missions_actives[self.joueur_id] = {
+            "texte": mission_choisie["texte"], "delai_texte": mission_choisie["delai"],
+            "date_debut": datetime.now(), "date_fin": date_fin, "duree_totale": duree,
+            "cat": cat, "channel_id": interaction.channel.id, "alerte_moitie": False, "alerte_un_quart": False, "en_attente": False
+        }
+
+        # Désactivation des boutons de la vue pour bloquer d'autres clics
+        for child in self.children:
+            child.disabled = True
+
+        embed_mission = discord.Embed(title="📜 DECRET ATTRIBUÉ ET CHRONO LANCÉ", color=discord.Color.gold())
+        embed_mission.add_field(name="🎯 Objectif", value=f"*{mission_choisie['texte']}*", inline=False)
+        embed_mission.add_field(name="⏳ Temps restant réel", value=f"<t:{timestamp_discord}:R> (soit le <t:{timestamp_discord}:f>)", inline=False)
+        
+        await interaction.response.edit_message(view=self)
+        await interaction.channel.send(content=f"{interaction.user.mention}", embed=embed_mission)
+
+    @discord.ui.button(label="🟢 Commune", style=discord.ButtonStyle.secondary, custom_id="btn_commune")
+    async def btn_commune(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.attribuer_mission_bouton(interaction, "commune")
+
+    @discord.ui.button(label="🔵 Moyenne", style=discord.ButtonStyle.primary, custom_id="btn_moyenne")
+    async def btn_moyenne(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.attribuer_mission_bouton(interaction, "moyenne")
+
+    @discord.ui.button(label="🟠 Difficile", style=discord.ButtonStyle.success, custom_id="btn_difficile")
+    async def btn_difficile(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.attribuer_mission_bouton(interaction, "difficile")
+
+    @discord.ui.button(label="🔴 Royal", style=discord.ButtonStyle.danger, custom_id="btn_royal")
+    async def btn_royal(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.attribuer_mission_bouton(interaction, "royal")
+
+# --- FIN LOGIQUE DES VUES ---
+
 @bot.event
 async def on_ready():
     if not verifier_temps_missions.is_running(): verifier_temps_missions.start()
-    print("Bot MADAmission Épuré opérationnel !")
+    bot.add_view(VueBoutonTicket()) # Enregistre le bouton persistant
+    print("Bot MADAmission Pro — Prêt avec Tickets & Temps Réel !")
 
 @bot.event
 async def on_message(message):
@@ -158,9 +266,9 @@ async def on_message(message):
         
         citoyen_desc = (
             "⚔️ **SYSTÈME DE QUÊTES**\n"
-            "`!mission <difficulté>`\n↳ Pioche une mission en solo (`commune`, `moyenne`, `difficile`, `royal`).\n\n"
-            "`!missionacomplis`\n↳ Met le chrono en pause et alerte les Instructeurs pour vérification.\n\n"
-            "`!missions_en_cours`\n↳ Affiche le statut de ta tâche active.\n\n"
+            "Clique sur le bouton ci-dessous pour ouvrir un salon de quête privé.\n\n"
+            "`!missionacomplis`\n↳ Dans ton ticket, met le chrono en pause et alerte les Instructeurs.\n\n"
+            "`!missions_en_cours`\n↳ Affiche le statut complet de ta tâche active.\n\n"
             "📊 **ARCHIVES PERSONNELLES**\n"
             "`!historique [@joueur]`\n↳ Consulte le journal complet, le nombre de réussites et d'échecs."
         )
@@ -170,15 +278,13 @@ async def on_message(message):
             admin_desc = (
                 "🚨 **HAUT COMMANDEMENT (ADMINISTRATEUR)**\n"
                 "`!missionfinit @joueur`\n↳ Valide définitivement l'objectif réussi du joueur.\n\n"
-                "`!missionechec @joueur`\n↳ Invalide la quête : elle retourne dans le catalogue et inflige un échec consigné dans l'historique.\n\n"
+                "`!missionechec @joueur`\n↳ Invalide la quête et inflige un échec consigné dans l'historique.\n\n"
                 "📂 **BASE DE DONNÉES DES MISSIONS**\n"
-                "`!listemissions`\n↳ Liste l'intégralité des quêtes enregistrées.\n\n"
-                "`!addmission <difficulté> <texte> pendant <temps>`\n↳ Enregistre un nouveau décret (Ex: `commune Miner du fer pendant 1h`).\n\n"
-                "`!delmission <difficulté> <numéro>`\n↳ Supprime définitivement une quête via son numéro de liste."
+                "`!listemissions` | `!addmission` | `!delmission`"
             )
             embed.add_field(name="👑 ADMINISTRATION", value=admin_desc, inline=False)
             
-        await message.channel.send(embed=embed)
+        await message.channel.send(embed=embed, view=VueBoutonTicket())
         return
 
     if content_lower == "!missions_en_cours":
@@ -187,15 +293,12 @@ async def on_message(message):
             return
             
         m = missions_actives[message.author.id]
-        t_rest = m["date_fin"] - datetime.now()
-        jours = max(0, t_rest.days)
-        heures, reste = divmod(max(0, t_rest.seconds), 3600)
-        minutes, _ = divmod(reste, 60)
+        ts = int(m["date_fin"].timestamp())
         
         if m.get("en_attente", False):
             await message.channel.send(f"👤 <@{message.author.id}> [**{m['cat'].upper()}**] -> *\"{m['texte']}\"* 🛑 **GELÉ (En attente d'évaluation)**")
         else:
-            await message.channel.send(f"👤 <@{message.author.id}> [**{m['cat'].upper()}**] -> *\"{m['texte']}\"* (Reste : `{jours}j {heures}h {minutes}m`)")
+            await message.channel.send(f"👤 <@{message.author.id}> [**{m['cat'].upper()}**] -> *\"{m['texte']}\"* Fin : <t:{ts}:R>")
         return
 
     if content_lower == "!missionacomplis":
@@ -229,7 +332,7 @@ async def on_message(message):
             sauvegarder_profils(profils)
             
             del missions_actives[cible.id]
-            await message.channel.send(f"✅ Mission validée avec succès par le Haut Commandement pour {cible.mention} !")
+            await message.channel.send(f"✅ Mission validée avec succès par le Haut Commandement ! Tu peux fermer ce salon si nécessaire.")
             return
         await message.channel.send("❌ Aucun objectif en cours trouvé pour ce joueur.")
         return
@@ -253,43 +356,12 @@ async def on_message(message):
             del missions_actives[cible.id]
                 
             await message.channel.send(
-                f"↩️ **Mission invalidée par l'Instructeur pour {cible.mention}.** La quête retourne dans le catalogue.\n"
-                f"📉 **Conséquence :** Un échec a été enregistré dans l'historique du joueur.\n\n{TEXTE_ECHEC}"
+                f"↩️ **Mission invalidée par l'Instructeur.** La quête retourne dans le catalogue.\n"
+                f"📉 **Conséquence :** Un échec a été consigné dans le registre.\n\n{TEXTE_ECHEC}"
             )
             return
             
         await message.channel.send("❌ Aucun objectif en cours trouvé pour ce joueur.")
-        return
-
-    if content_lower.startswith("!mission"):
-        joueur = message.author
-        mots = content_lower.split()
-        if len(mots) < 2: return
-        cat = mots[1]
-        if cat in ["commune", "commun"]: cat = "commune"
-        elif cat in ["moyenne", "moyen"]: cat = "moyenne"
-        elif cat in ["difficile"]: cat = "difficile"
-        elif cat in ["royal", "royale"]: cat = "royal"
-        else: return
-
-        if joueur.id in missions_actives:
-            await message.channel.send("❌ Tu as déjà une mission en cours !")
-            return
-
-        missions_dispo = charger_missions_fichier()
-        if not missions_dispo[cat]:
-            await message.channel.send("❌ Plus de mission disponible dans cette catégorie.")
-            return
-        mission_choisie = missions_dispo[cat].pop(random.randint(0, len(missions_dispo[cat]) - 1))
-        réécrire_toutes_missions(missions_dispo)
-
-        duree = extraire_duree(mission_choisie["delai"])
-        missions_actives[joueur.id] = {
-            "texte": mission_choisie["texte"], "delai_texte": mission_choisie["delai"],
-            "date_debut": datetime.now(), "date_fin": datetime.now() + duree, "duree_totale": duree,
-            "cat": cat, "channel_id": message.channel.id, "alerte_moitie": False, "alerte_un_quart": False, "en_attente": False
-        }
-        await message.channel.send(f"📜 **Mission attribuée :** *\"{mission_choisie['texte']}\"* (Délai : {mission_choisie['delai']})")
         return
 
     if content_lower.startswith("!listemissions") and message.author.guild_permissions.administrator:
@@ -305,7 +377,7 @@ async def on_message(message):
 
     if content_lower.startswith("!addmission") and message.author.guild_permissions.administrator:
         texte_total = content[11:].strip()
-        mots = texte_total.split()
+        mots = text_total.split()
         if len(mots) < 4 or "pendant" not in texte_total.lower():
             await message.channel.send("❌ Format incorrect. Exemple : `!addmission commune Miner 50 diamants pendant 2h`")
             return
@@ -345,7 +417,6 @@ async def on_message(message):
             await message.channel.send("❌ Numéro invalide ou mission introuvable.")
         return
 
-    # --- HISTORIQUE ET COMPTEURS DES DECRETS ---
     if content_lower.startswith("!historique"):
         cible = message.mentions[0] if message.mentions else message.author
         profils = charger_profils()
@@ -354,30 +425,18 @@ async def on_message(message):
         userData = profils[str(cible.id)]
         hist = userData["historique"]
         
-        embed = discord.Embed(
-            title=f"📜 ARCHIVES ET PARCHEMIN — {cible.display_name}", 
-            color=discord.Color.blue()
-        )
+        embed = discord.Embed(title=f"📜 ARCHIVES ET PARCHEMIN — {cible.display_name}", color=discord.Color.blue())
         embed.set_thumbnail(url=cible.display_avatar.url)
         
-        # Affichage du système de compteurs uniques (nombre de missions totales)
         cpt_txt = f"🟢 **Missions Réussies :** `{userData['total_reussies']}`\n🔴 **Missions Échouées :** `{userData['total_echouees']}`"
         embed.add_field(name="📊 Bilan des Objectifs", value=cpt_txt, inline=False)
         
-        # Liste de l'intégralité de l'historique
         if not hist:
             embed.add_field(name="📜 Historique des Décrets", value="*Aucune mission enregistrée dans le grand registre.*", inline=False)
         else:
-            hist_lignes = []
-            for item in hist:
-                emoji = "✅" if item["statut"] == "Succès" else "❌"
-                hist_lignes.append(f"{emoji} **[{item['date']}]** — {item['texte']}")
-            
-            # Gestion de la taille du message si l'historique devient extrêmement long
+            hist_lignes = [f"✅" if item["statut"] == "Succès" else "❌" + f" **[{item['date']}]** — {item['texte']}" for item in hist]
             corps_historique = "\n".join(hist_lignes)
-            if len(corps_historique) > 1024:
-                corps_historique = corps_historique[:1000] + "\n*... (suite tronquée)*"
-                
+            if len(corps_historique) > 1024: corps_historique = corps_historique[:1000] + "\n*...*"
             embed.add_field(name="📜 Historique des Décrets", value=corps_historique, inline=False)
             
         await message.channel.send(embed=embed)
