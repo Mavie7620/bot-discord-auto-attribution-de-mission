@@ -682,5 +682,6 @@ async def on_message(message):
             reponse += f"**{idx}.** {emoji} [{act['date']}] *{act['texte']}* — **{act['statut']}**\n"
         await message.channel.send(reponse)
         return
-
-    await bot.process_commands(message)
+await bot.process_commands(message)
+keep_alive()
+bot.run("TON_TOKEN_DISCORD_ICI")
