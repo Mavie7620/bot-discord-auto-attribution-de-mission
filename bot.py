@@ -345,7 +345,6 @@ class VueGestionJoueurMission(discord.ui.View):
         mention_ins = role_instructeur.mention if role_instructeur else '@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]'
 
         await interaction.channel.set_permissions(interaction.user, read_messages=True, send_messages=False)
-        
         await interaction.channel.send(f"💬 {interaction.user.mention}, un instructeur a été notifié. Votre demande va être traitée dans les plus brefs délais.")
         
         msg_fin = (
@@ -417,7 +416,7 @@ async def on_ready():
     if not verifier_temps_missions.is_running(): verifier_temps_missions.start()
     bot.add_view(VueBoutonTicket())
     bot.add_view(VueFermerTicket())
-    print("Bot MADAmission Pro — Double notifications & bouton de fermeture prêt !")
+    print("Bot MADAmission Pro — Prêt et vérifié !")
 
 @bot.event
 async def on_message(message):
@@ -443,7 +442,7 @@ async def on_message(message):
             "`!missionacomplis` ou via les boutons sous ton chrono.\n\n"
             "`!missions_en_cours`\n↳ Affiche le statut complet de ta tâche active.\n\n"
             "📊 **ARCHIVES PERSONNELLES**\n"
-            "`!historique [@joueur]`\n↳ Consulte le journal complet, le nombre de réussites et d'échecs."
+            "`!historique [@joueur]`\n↳ Consultez votre bilan d'objectifs personnels."
         )
         embed.add_field(name="👥 ESPACE DES CITOYENS", value=citoyen_desc, inline=False)
         
@@ -548,7 +547,7 @@ async def on_message(message):
     if content_lower.startswith("!addmission"):
         if not verifier_permissions_staff(message.author): return
         texte_total = content[11:].strip()
-        mots = text_total.split()
+        mots = texte_total.split()
         if len(mots) < 4 or "pendant" not in texte_total.lower():
             await message.channel.send("❌ Format incorrect. Exemple : `!addmission commune Miner 50 diamants pendant 2h`")
             return
@@ -560,10 +559,12 @@ async def on_message(message):
         else:
             await message.channel.send("❌ Catégorie inconnue (`commune`, `moyenne`, `difficile`, `royal`).")
             return
+        
         parties = texte_total.split(None, 1)[1].strip()
         index_pendant = parties.lower().rfind("pendant")
         texte_mission = parties[:index_pendant].strip()
         delai = parties[index_pendant + 7:].strip()
+        
         sauvegarder_mission_fichier(cat, texte_mission, delai)
         missions_dispo = charger_missions_fichier()
         await message.channel.send(f"⚜️ **Mission ajoutée au catalogue !** (`{cat}` : *{texte_mission}*)")
@@ -572,14 +573,18 @@ async def on_message(message):
     if content_lower.startswith("!delmission"):
         if not verifier_permissions_staff(message.author): return
         mots = content_lower.split()
-        if len(mots) < 3: return
+        if len(mots) < 3: 
+            await message.channel.send("❌ Format incorrect. Exemple : `!delmission commune 1`")
+            return
         cat = mots[1]
         if cat in ["commune", "commun"]: cat = "commune"
         elif cat in ["moyenne", "moyen"]: cat = "moyenne"
         elif cat in ["difficile"]: cat = "difficile"
         elif cat in ["royal", "royale"]: cat = "royal"
         try: numero = int(mots[2]) - 1
-        except ValueError: return
+        except ValueError: 
+            await message.channel.send("❌ Numéro de mission invalide.")
+            return
         missions_dispo = charger_missions_fichier()
         if cat in missions_dispo and 0 <= numero < len(missions_dispo[cat]):
             retiree = missions_dispo[cat].pop(numero)
