@@ -109,7 +109,7 @@ missions_actives = {}
 urgence_active = {}
 
 TEXTE_ECHEC = (
-    "⚜️ **𝕾𝖞𝖘𝖙𝖊̀𝖒𝖊 𝖉𝖊 𝕸𝖎𝖘𝖘𝖎𝖔𝖓𝖘 𝖉𝖊 𝕸𝖆𝖉𝖆𝖌𝖆𝖘𝖈𝖆𝖗** ⚜️\n"
+    "⚜️ **𝕾𝖞𝖘𝖙𝖊̀𝖒𝖊 𝖉𝖊 𝕸𝖎𝖘𝖘𝖎𝖔𝖓𝖘 𝖉𝖊 𝕸𝖆𝖉𝖆𝖈𝖆𝖘𝖈𝖆𝖗** ⚜️\n"
     "**D'après l'article Ⅴ — Rappel :**\n"
     "- **Refuser ou abandonner une mission attribuée sans raison valable peut être sanctionné.**\n"
     "- *L'État récompense l'investissement et la persévérance.*\n"
@@ -175,7 +175,7 @@ async def verifier_temps_missions():
                 initialiser_profil(uid, profils)
                 profils[str(uid)]["echouees"][m_info["cat"]] += 1
                 ajouter_historique(uid, profils, m_info["texte"], "Échec")
-            sauvegarder_profils(profils)
+            saved_profiles = sauvegarder_profils(profils)
 
             role_instructeur = discord.utils.get(channel.guild.roles, name="Instructeur")
             await channel.send(
@@ -594,7 +594,7 @@ async def on_message(message):
 
     if content_lower.startswith("!addmission") and message.author.guild_permissions.administrator:
         texte_total = content[11:].strip()
-        mots = texte_total.split() # Correction : texte_total au lieu de text_total
+        mots = texte_total.split()
         if len(mots) < 4 or "pendant" not in texte_total.lower():
             await message.channel.send("❌ Format incorrect. Exemple : `!addmission commune Miner 50 diamants pendant 2h`")
             return
@@ -639,22 +639,30 @@ async def on_message(message):
         cible = message.mentions[0] if message.mentions else message.author
         profils = charger_profils()
         initialiser_profil(cible.id, profils)
-        st = profils[str(cible.id)]
+        s_id = str(cible.id)
         
-        tot_r = sum(st["reussies"].values())
-        tot_e = sum(st["echouees"].values())
-        total = tot_r + tot_e
-        tx = int((tot_r / total) * 100) if total > 0 else 100
-        rang = calculer_rang(st)
-
-        embed = discord.Embed(title=f"📜 PROFIL DE CITOYEN — {cible.name}", color=discord.Color.blue())
+        r = profils[s_id]["reussies"]
+        e = profils[s_id]["echouees"]
+        
+        reussies_totales = sum(r.values())
+        echouees_totales = sum(e.values())
+        total_missions = reussies_totales + echouees_totales
+        taux_reussite = int((reussies_totales / total_missions) * 100) if total_missions > 0 else 100
+        
+        rang = calculer_rang(profils[s_id])
+        
+        embed = discord.Embed(title=f"📜 PARCHEMIN DE CITOYEN — {cible.display_name}", color=discord.Color.blue())
+        embed.set_thumbnail(url=cible.display_avatar.url if cible.display_avatar else None)
         embed.add_field(name="🎖️ Rang Militaire", value=f"**{rang}**", inline=False)
-        embed.add_field(name="✅ Quêtes Réussies", value=f"`{tot_r}` accomplies", inline=True)
-        embed.add_field(name="❌ Échecs / Malus", value=f"`{tot_e}` échouées", inline=True)
-        embed.add_field(name="📈 Ratio de Succès", value=f"`{tx}%` d'efficacité", inline=True)
         
-        details = "\n".join([f"• **{k.upper()}** : Rec: `{v}` | Éch: `{st['echouees'].get(k,0)}`" for k, v in st["reussies"].items()])
-        embed.add_field(name="📊 Détail par catégories", value=details, inline=False)
+        stats_txt = (
+            f"🟢 **Réussies :** `{reussies_totales}`\n"
+            f"↳ *Communes: {r['commune']} | Moyennes: {r['moyenne']} | Difficiles: {r['difficile']} | Royales: {r['royal']} | Urgences: {r['urgence']}*\n\n"
+            f"🔴 **Échouées :** `{echouees_totales}`\n"
+            f"↳ *Communes: {e['commune']} | Moyennes: {e['moyenne']} | Difficiles: {e['difficile']} | Royales: {e['royal']} | Urgences: {e['urgence']}*\n\n"
+            f"📈 **Taux d'Efficacité :** `{taux_reussite}%`"
+        )
+        embed.add_field(name="📊 Statistiques de Service", value=stats_txt, inline=False)
         await message.channel.send(embed=embed)
         return
 
@@ -663,20 +671,16 @@ async def on_message(message):
         profils = charger_profils()
         initialiser_profil(message.author.id, profils)
         hist = profils[str(message.author.id)]["historique"]
+        
         if not hist:
-            await message.channel.send("📜 Ton parchemin d'historique est vierge pour le moment.")
+            await message.channel.send("📜 Ton parchemin d'historique est totalement vierge pour le moment.")
             return
-        reponse = f"📜 **HISTORIQUE DES 5 DERNIÈRES ACTIONS DE {message.author.mention} :**\n"
-        for i, h in enumerate(hist, start=1):
-            emoji = "✅" if h["statut"] == "Succès" else "❌" if h["statut"] == "Échec" else "⚙️"
-            reponse += f"{emoji} **{i}. [{h['date']}]** {h['texte']} — *{h['statut']}*\n"
+            
+        reponse = f"📜 **LES 5 DERNIÈRES ACTIONS DE {message.author.mention} :**\n"
+        for idx, act in enumerate(hist, 1):
+            emoji = "✅" if act["statut"] in ["Succès", "Modif Admin"] else "❌"
+            reponse += f"**{idx}.** {emoji} [{act['date']}] *{act['texte']}* — **{act['statut']}**\n"
         await message.channel.send(reponse)
         return
 
-# Démarrage du keep-alive web pour le hosting et lancement du bot
-keep_alive()
-TOKEN = os.environ.get("DISCORD_TOKEN") # Assure-toi d'avoir configuré ton token dans tes variables d'environnement
-if TOKEN:
-    bot.run(TOKEN)
-else:
-    print("Erreur : Aucun token trouvé sous le nom 'DISCORD_TOKEN'.")
+    await bot.process_commands(message)
