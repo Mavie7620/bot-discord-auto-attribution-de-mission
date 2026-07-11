@@ -145,40 +145,35 @@ async def verifier_temps_missions():
 
 class VueBoutonTicket(discord.ui.View):
     def __init__(self):
-        super().__init__(timeout=None) # Persistant même après redémarrage du bot
+        super().__init__(timeout=None)
 
-    @discord.ui.button(label="🎫 Ouvrir un Ticket de Mission", style=discord.欵uttonStyle.green, custom_id="btn_ouvrir_ticket")
+    @discord.ui.button(label="🎫 Ouvrir un Ticket de Mission", style=discord.ButtonStyle.green, custom_id="btn_ouvrir_ticket")
     async def ouvrir_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         joueur = interaction.user
         
-        # Vérification si le joueur a déjà une mission
         if joueur.id in missions_actives:
             await interaction.response.send_message("❌ Tu as déjà une mission en cours ! Termine-la avant d'ouvrir un autre ordre.", ephemeral=True)
             return
 
         await interaction.response.defer(ephemeral=True)
 
-        # Permissions privées pour le ticket
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
             joueur: discord.PermissionOverwrite(read_messages=True, send_messages=True),
             guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
         }
         
-        # On essaie de ping le rôle Instructeur pour qu'il voie le salon
         role_instructeur = discord.utils.get(guild.roles, name="Instructeur")
         if role_instructeur:
             overwrites[role_instructeur] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
 
-        # Création du salon
         nom_salon = f"🪖-ordre-{joueur.name}"
         ticket_channel = await guild.create_text_channel(name=nom_salon, overwrites=overwrites)
         
-        # Envoi de l'interface des choix dans le ticket
         embed_ticket = discord.Embed(
             title="⚜️ CENTRE DE SÉLECTION DES DÉCRETS ⚜️",
-            description=f"Bienvenue {joueur.mention}.\nChoisis la difficulté de l'objectif que tu souhaites accomplir aujourd'hui pour Madagascar.",
+            description=f"Bienvenue {joueur.mention}.\nChoisis la difficulté de l'objectif que tu souhaitez accomplir aujourd'hui pour Madagascar.",
             color=discord.Color.dark_red()
         )
         await ticket_channel.send(embed=embed_ticket, view=VueChoixDifficulte(joueur.id))
@@ -209,8 +204,6 @@ class VueChoixDifficulte(discord.ui.View):
 
         duree = extraire_duree(mission_choisie["delai"])
         date_fin = datetime.now() + duree
-        
-        # Timestamp Discord pour le temps réel interactif (<t:TIMESTAMP:R>)
         timestamp_discord = int(date_fin.timestamp())
 
         missions_actives[self.joueur_id] = {
@@ -219,7 +212,6 @@ class VueChoixDifficulte(discord.ui.View):
             "cat": cat, "channel_id": interaction.channel.id, "alerte_moitie": False, "alerte_un_quart": False, "en_attente": False
         }
 
-        # Désactivation des boutons de la vue pour bloquer d'autres clics
         for child in self.children:
             child.disabled = True
 
@@ -251,7 +243,7 @@ class VueChoixDifficulte(discord.ui.View):
 @bot.event
 async def on_ready():
     if not verifier_temps_missions.is_running(): verifier_temps_missions.start()
-    bot.add_view(VueBoutonTicket()) # Enregistre le bouton persistant
+    bot.add_view(VueBoutonTicket())
     print("Bot MADAmission Pro — Prêt avec Tickets & Temps Réel !")
 
 @bot.event
@@ -377,7 +369,7 @@ async def on_message(message):
 
     if content_lower.startswith("!addmission") and message.author.guild_permissions.administrator:
         texte_total = content[11:].strip()
-        mots = text_total.split()
+        mots = texte_total.split()
         if len(mots) < 4 or "pendant" not in texte_total.lower():
             await message.channel.send("❌ Format incorrect. Exemple : `!addmission commune Miner 50 diamants pendant 2h`")
             return
@@ -428,7 +420,7 @@ async def on_message(message):
         embed = discord.Embed(title=f"📜 ARCHIVES ET PARCHEMIN — {cible.display_name}", color=discord.Color.blue())
         embed.set_thumbnail(url=cible.display_avatar.url)
         
-        cpt_txt = f"🟢 **Missions Réussies :** `{userData['total_reussies']}`\n🔴 **Missions Échouées :** `{userData['total_echouees']}`"
+        cpt_txt = f"🟢 **Missions RéUSSITES :** `{userData['total_reussies']}`\n🔴 **Missions ÉCHOUÉES :** `{userData['total_echouees']}`"
         embed.add_field(name="📊 Bilan des Objectifs", value=cpt_txt, inline=False)
         
         if not hist:
