@@ -224,7 +224,7 @@ class VueBoutonTicket(discord.ui.View):
         
         nom_categorie_requis = "⚜️ == [ 𝕸𝖎𝖘𝖘𝖎𝖔𝖓𝖘 ] =="
         if not interaction.channel.category or interaction.channel.category.name != nom_categorie_requis:
-            await interaction.response.send_message(f"❌ Les tickets s'ourent uniquement dans les salons de la catégorie **{nom_categorie_requis}** !", ephemeral=True)
+            await interaction.response.send_message(f"❌ Les tickets s'ouvrent uniquement dans les salons de la catégorie **{nom_categorie_requis}** !", ephemeral=True)
             return
         
         if joueur.id in missions_actives:
@@ -460,72 +460,75 @@ async def on_message(message):
         await message.channel.send(embed=embed, view=VueBoutonTicket())
         return
 
-    # --- NOUVELLE COMMANDE !TUTO (ADAPTATIVE SELON LE RÔLE) ---
+    # --- COMMANDE !TUTO (CITOYEN - ACCESSIBLE À TOUS) ---
     if content_lower == "!tuto":
-        est_staff = verifier_permissions_staff(message.author)
-        
-        if est_staff:
-            embed_tuto = discord.Embed(
-                title="👑 MANUEL DE L'ADMINISTRATION & DE L'INSTRUCTION 👑",
-                description="Ce guide récapitule vos privilèges et devoirs pour encadrer le système de missions de Madagascar.",
-                color=discord.Color.red()
-            )
-            embed_tuto.add_field(
-                name="📥 1. Gestion des Demandes de Fin de Mission",
-                value="Lorsqu'un joueur utilise `!missionacomplis` ou son bouton interactif, vous recevez une alerte dans `#validation-mission` contenant **3 boutons** :\n"
-                      "🔹 `Accepter` : Clôture le ticket en succès (+1 point historique).\n"
-                      "🔹 `Refuser` : Clôture le ticket en échec (applique l'Article V).\n"
-                      "🔹 `Demander des preuves` : Rouvre temporairement l'accès à l'écriture pour le joueur afin qu'il envoie une capture d'écran.",
-                inline=False
-            )
-            embed_tuto.add_field(
-                name="🛠️ 2. Commandes Manuelles Prioritaires",
-                value="Si l'interface de boutons échoue, utilisez ces commandes textuelles n'importe où :\n"
-                      "• `!missionaccepter @joueur` -> Force le succès.\n"
-                      "• `!missionrefuser @joueur` -> Force la défaite.\n"
-                      "• `!missionpreuve @joueur` -> Force la réouverture du salon pour preuve.",
-                inline=False
-            )
-            embed_tuto.add_field(
-                name="📂 3. Maintenance du Catalogue des Décrets",
-                value="• `!listemissions` : Affiche l'index de toutes les missions enregistrées.\n"
-                      "• `!addmission [catégorie] [texte] pendant [temps]` : Ajoute une mission.\n"
-                      "  *Exemple : `!addmission royal Construire un château pendant 3j`*\n"
-                      "• `!delmission [catégorie] [numéro]` : Supprime la mission correspondante selon la liste.",
-                inline=False
-            )
-            embed_tuto.set_footer(text="Madagascar • Mode Administration Active")
-        
-        else:
-            embed_tuto = discord.Embed(
-                title="🪖 GUIDE DU CITOYEN DE MADAGASCAR 🪖",
-                description="Suis ces instructions impériales pour mener à bien tes décrets sans subir les foudres de l'Article V !",
-                color=discord.Color.green()
-            )
-            embed_tuto.add_field(
-                name="🎫 Étape 1 : Ouvrir l'Ordre",
-                value="Rends-toi dans la catégorie **⚜️ == [ 𝕸𝖎𝖘𝖘𝖎𝖔𝖓𝖘 ] ==** et utilise la commande `!aide` pour faire apparaître le bouton de ticket. Clique dessus pour générer ton salon privé `🪖-ordre-tonpseudo`.",
-                inline=False
-            )
-            embed_tuto.add_field(
-                name="📜 Étape 2 : Sélectionner sa Difficulté",
-                value="Dans ton ticket, choisis ton contrat parmi les difficultés disponibles : `Commune`, `Moyenne`, `Difficile` ou `Royal`. **Attention, le chrono démarre instantanément dès ton clic !**",
-                inline=False
-            )
-            embed_tuto.add_field(
-                name="🏁 Étape 3 : Déclarer l'accomplissement",
-                value="Une fois ton objectif Minecraft/Discord réalisé en jeu :\n"
-                      "1. Clique sur **🏁 Finir la mission** (ou tape `!missionacomplis`). Ton chrono se mettra en pause.\n"
-                      "2. Si un instructeur réclame une preuve, le bot te le dira. Dépose simplement ton image/screen dans le salon !",
-                inline=False
-            )
-            embed_tuto.add_field(
-                name="🚨 Rappel sur l'Article V",
-                value="Tout abandon volontaire via le bouton rouge ou dépassement du temps réglementaire se soldera par un **Échec** consigné dans ton dossier.",
-                inline=False
-            )
-            embed_tuto.set_footer(text="Madagascar • Que la fortune te sourie")
+        embed_tuto = discord.Embed(
+            title="🪖 GUIDE DU CITOYEN DE MADAGASCAR 🪖",
+            description="Suis ces instructions impériales pour mener à bien tes décrets sans subir les foudres de l'Article V !",
+            color=discord.Color.green()
+        )
+        embed_tuto.add_field(
+            name="🎫 Étape 1 : Ouvrir l'Ordre",
+            value="Rends-toi dans la catégorie **⚜️ == [ 𝕸𝖎𝖘𝖘𝖎𝖔𝖓𝖘 ] ==** et utilise la commande `!aide` pour faire apparaître le bouton de ticket. Clique dessus pour générer ton salon privé `🪖-ordre-tonpseudo`.",
+            inline=False
+        )
+        embed_tuto.add_field(
+            name="📜 Étape 2 : Sélectionner sa Difficulté",
+            value="Dans ton ticket, choisis ton contrat parmi les difficultés disponibles : `Commune`, `Moyenne`, `Difficile` ou `Royal`. **Attention, le chrono démarre instantanément dès ton clic !**",
+            inline=False
+        )
+        embed_tuto.add_field(
+            name="🏁 Étape 3 : Déclarer l'accomplissement",
+            value="Une fois ton objectif réalisé en jeu :\n"
+                  "1. Clique sur **🏁 Finir la mission** (ou tape `!missionacomplis`). Ton chrono se mettra en pause.\n"
+                  "2. Si un instructeur réclame une preuve, le bot te le dira. Dépose simplement ton image/screen dans le salon !",
+            inline=False
+        )
+        embed_tuto.add_field(
+            name="🚨 Rappel sur l'Article V",
+            value="Tout abandon volontaire via le bouton rouge ou dépassement du temps réglementaire se soldera par un **Échec** consigné dans ton dossier.",
+            inline=False
+        )
+        embed_tuto.set_footer(text="Madagascar • Que la fortune te sourie")
+        await message.channel.send(embed=embed_tuto)
+        return
 
+    # --- COMMANDE !TUTOADM (STAFF UNIQUEMENT) ---
+    if content_lower == "!tutoadm":
+        if not verifier_permissions_staff(message.author):
+            await message.channel.send("❌ Tu n'as pas l'autorité nécessaire pour consulter le manuel du Haut Commandement.")
+            return
+
+        embed_tuto = discord.Embed(
+            title="👑 MANUEL DE L'ADMINISTRATION & DE L'INSTRUCTION 👑",
+            description="Ce guide récapitule vos privilèges et devoirs pour encadrer le système de missions de Madagascar.",
+            color=discord.Color.red()
+        )
+        embed_tuto.add_field(
+            name="📥 1. Gestion des Demandes de Fin de Mission",
+            value="Lorsqu'un joueur déclare sa mission terminée, vous recevez une alerte dans `#validation-mission` contenant **3 boutons** :\n"
+                  "🔹 `Accepter` : Clôture le ticket en succès (+1 point historique).\n"
+                  "🔹 `Refuser` : Clôture le ticket en échec (applique l'Article V).\n"
+                  "🔹 `Demander des preuves` : Rouvre temporairement l'accès à l'écriture pour le joueur afin qu'il envoie une capture d'écran.",
+            inline=False
+        )
+        embed_tuto.add_field(
+            name="🛠️ 2. Commandes Manuelles Prioritaires",
+            value="Si l'interface de boutons échoue, utilisez ces commandes textuelles n'importe où :\n"
+                  "• `!missionaccepter @joueur` -> Force le succès.\n"
+                  "• `!missionrefuser @joueur` -> Force la défaite.\n"
+                  "• `!missionpreuve @joueur` -> Force la réouverture du salon pour preuve.",
+            inline=False
+        )
+        embed_tuto.add_field(
+            name="📂 3. Maintenance du Catalogue des Décrets",
+            value="• `!listemissions` : Affiche l'index de toutes les missions enregistrées.\n"
+                  "• `!addmission [catégorie] [texte] pendant [temps]` : Ajoute une mission.\n"
+                  "  *Exemple : `!addmission royal Construire un château pendant 3j`*\n"
+                  "• `!delmission [catégorie] [numéro]` : Supprime la mission correspondante selon la liste.",
+            inline=False
+        )
+        embed_tuto.set_footer(text="Madagascar • Mode Administration Active")
         await message.channel.send(embed=embed_tuto)
         return
 
@@ -616,7 +619,7 @@ async def on_message(message):
     if content_lower.startswith("!addmission"):
         if not verifier_permissions_staff(message.author): return
         texte_total = content[11:].strip()
-        mots = text_total.split()
+        mots = texte_total.split()
         if len(mots) < 4 or "pendant" not in texte_total.lower():
             await message.channel.send("❌ Format incorrect. Exemple : `!addmission commune Miner 50 diamants pendant 2h`")
             return
