@@ -95,8 +95,6 @@ TEXTE_ECHEC = (
     "- *Les missions constituent l'un des principaux moyens de progresser au sein de Madagascar.*"
 )
 
-# --- FONCTIONS REUTILISABLES POUR LES DEUX METHODES ---
-
 def verifier_permissions_staff(user):
     roles_noms = [r.name for r in user.roles]
     return user.guild_permissions.administrator or "[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]" in roles_noms or "Palais Royal" in roles_noms
@@ -117,14 +115,14 @@ async def action_accepter_mission(joueur_id, channel):
 async def action_refuser_mission(joueur_id, channel):
     if joueur_id in missions_actives:
         m_info = missions_actives[joueur_id]
-        sauvegarder_mission_fichier(m_info["cat"], m_info["texte"], m_info["delai_texte"])
+        # Modifié : On ne réinjecte plus dans le fichier car la mission n'en sort jamais
         profils = charger_profils()
         initialiser_profil(joueur_id, profils)
         profils[str(joueur_id)]["total_echouees"] += 1
         ajouter_historique(joueur_id, profils, m_info["texte"], "Échec")
         sauvegarder_profils(profils)
         del missions_actives[joueur_id]
-        await channel.send(f"↩️ **Mission Refusée**. L'objectif retourne au catalogue.\n\n{TEXTE_ECHEC}")
+        await channel.send(f"↩️ **Mission Terminée (Refusé/Échec)**.\n\n{TEXTE_ECHEC}")
         return True
     return False
 
@@ -159,8 +157,7 @@ async def verifier_temps_missions():
 
         if maintenant > date_fin:
             missions_a_retirer.append(joueur_id)
-            sauvegarder_mission_fichier(m_info["cat"], m_info["texte"], m_info["delai_texte"])
-            
+            # Modifié : On ne réinjecte plus dans le fichier ici non plus
             profils = charger_profils()
             initialiser_profil(joueur_id, profils)
             profils[str(joueur_id)]["total_echouees"] += 1
@@ -185,8 +182,6 @@ async def verifier_temps_missions():
 
     for joueur_id in missions_a_retirer:
         if joueur_id in missions_actives: del missions_actives[joueur_id]
-
-# --- VUES INTERACTIVES (BOUTONS DISCORD) ---
 
 class VueBoutonTicket(discord.ui.View):
     def __init__(self):
@@ -251,8 +246,8 @@ class VueChoixDifficulte(discord.ui.View):
             await interaction.response.send_message(f"❌ Plus de mission disponible dans la catégorie `{cat.upper()}`.", ephemeral=True)
             return
 
-        mission_choisie = missions_dispo[cat].pop(random.randint(0, len(missions_dispo[cat]) - 1))
-        réécrire_toutes_missions(missions_dispo)
+        # Modifié : On sélectionne au hasard sans retirer (.pop) pour que la mission reste réutilisable
+        mission_choisie = random.choice(missions_dispo[cat])
 
         duree = extraire_duree(mission_choisie["delai"])
         date_fin = datetime.now() + duree
@@ -272,7 +267,7 @@ class VueChoixDifficulte(discord.ui.View):
         embed_mission.add_field(name="⏳ Temps restant réel", value=f"<t:{timestamp_discord}:R> (soit le <t:{timestamp_discord}:f>)", inline=False)
         
         await interaction.response.edit_message(view=self)
-        await interaction.channel.send(content=f"{interaction.user.mention}", embed=embed_mission)
+        await interaction.channel.send(content=f"{interaction.user.mention}", embed=embed_mission, view=VueGestionJoueurMission(self.joueur_id))
 
     @discord.ui.button(label="🟢 Commune", style=discord.ButtonStyle.secondary, custom_id="btn_commune")
     async def btn_commune(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -289,6 +284,53 @@ class VueChoixDifficulte(discord.ui.View):
     @discord.ui.button(label="🔴 Royal", style=discord.ButtonStyle.danger, custom_id="btn_royal")
     async def btn_royal(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.attribuer_mission_bouton(interaction, "royal")
+
+class VueGestionJoueurMission(discord.ui.View):
+    def __init__(self, joueur_id):
+        super().__init__(timeout=None)
+        self.joueur_id = joueur_id
+
+    @discord.ui.button(label="🏁 Finir la mission", style=discord.ButtonStyle.success, custom_id="joueur_finir_mission")
+    async def joueur_finir(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.joueur_id:
+            await interaction.response.send_message("❌ Cet objectif ne t'appartient pas.", ephemeral=True)
+            return
+
+        if self.joueur_id not in missions_actives:
+            await interaction.response.send_message("❌ Tu n'as aucune mission active.", ephemeral=True)
+            return
+
+        m_info = missions_actives[self.joueur_id]
+        if not m_info.get("en_attente", False):
+            m_info["en_attente"] = True
+            m_info["moment_gel"] = datetime.now()
+
+        for child in self.children: child.disabled = True
+        await interaction.response.edit_message(view=self)
+
+        role_instructeur = discord.utils.get(interaction.guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]")
+        mention_ins = role_instructeur.mention if role_instructeur else '@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]'
+
+        await interaction.channel.set_permissions(interaction.user, read_messages=True, send_messages=False)
+        await interaction.channel.send(
+            f"📢 {mention_ins} ! {interaction.user.mention} déclare avoir fini sa mission via l'interface : *\"{m_info['texte']}\"* !\n"
+            f"⏱️ **Le chrono est mis en pause.** Choisissez l'action appropriée :",
+            view=VueEvaluationMission(self.joueur_id)
+        )
+
+    @discord.ui.button(label="❌ Abandonner", style=discord.ButtonStyle.danger, custom_id="joueur_abandonner_mission")
+    async def joueur_abandonner(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if interaction.user.id != self.joueur_id:
+            await interaction.response.send_message("❌ Tu ne peux pas abandonner la mission de quelqu'un d'autre.", ephemeral=True)
+            return
+
+        if self.joueur_id not in missions_actives:
+            await interaction.response.send_message("❌ Tu n'as pas de mission active à abandonner.", ephemeral=True)
+            return
+
+        for child in self.children: child.disabled = True
+        await interaction.response.edit_message(view=self)
+        await action_refuser_mission(self.joueur_id, interaction.channel)
 
 class VueEvaluationMission(discord.ui.View):
     def __init__(self, joueur_id):
@@ -325,13 +367,11 @@ class VueEvaluationMission(discord.ui.View):
         await interaction.response.edit_message(view=self)
         await action_demander_preuve(self.joueur_id, interaction.channel, interaction.guild)
 
-# --- FIN LOGIQUE DES VUES ---
-
 @bot.event
 async def on_ready():
     if not verifier_temps_missions.is_running(): verifier_temps_missions.start()
     bot.add_view(VueBoutonTicket())
-    print("Bot MADAmission Pro — Prêt avec validation Hybride Commandes/Boutons !")
+    print("Bot MADAmission Pro — Missions infinies (non-consommables) prêtes !")
 
 @bot.event
 async def on_message(message):
@@ -354,7 +394,7 @@ async def on_message(message):
         citoyen_desc = (
             "⚔️ **SYSTÈME DE QUÊTES**\n"
             "Clique sur le bouton ci-dessous pour ouvrir un salon de quête privé.\n\n"
-            "`!missionacomplis`\n↳ Dans ton ticket, gèle le chrono et demande la validation de l'administration.\n\n"
+            "`!missionacomplis` ou via les boutons sous ton chrono.\n\n"
             "`!missions_en_cours`\n↳ Affiche le statut complet de ta tâche active.\n\n"
             "📊 **ARCHIVES PERSONNELLES**\n"
             "`!historique [@joueur]`\n↳ Consulte le journal complet, le nombre de réussites et d'échecs."
@@ -375,7 +415,7 @@ async def on_message(message):
         await message.channel.send(embed=embed, view=VueBoutonTicket())
         return
 
-    # --- NOUVELLES COMMANDES MANUELLES STAFF ---
+    # --- COMMANDES MANUELLES STAFF ---
 
     if content_lower.startswith("!missionaccepter"):
         if not verifier_permissions_staff(message.author): return
@@ -403,11 +443,11 @@ async def on_message(message):
             await message.channel.send("❌ Format incorrect. Exemple : `!missionpreuve @joueur`")
             return
         cible = message.mentions[0]
-        reussite = await action_demander_preuve(cible.id, message.channel, message.guild)
+        reussite = await action_preuve = await action_demander_preuve(cible.id, message.channel, message.guild)
         if not reussite: await message.channel.send("❌ Aucun objectif en cours trouvé pour ce joueur.")
         return
 
-    # --- ANCIENNES COMMANDES DE BASE ---
+    # --- COMMANDES DE BASE ---
 
     if content_lower == "!missions_en_cours":
         if message.author.id not in missions_actives:
