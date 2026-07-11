@@ -128,7 +128,7 @@ async def verifier_temps_missions():
         if maintenant > date_fin_urg:
             st_g = charger_stats_globales()
             st_g["urgences_echouees"] += 1
-            sauvegarder_stats_globales(st_g)
+            savgarder_stats_globales(st_g)
             
             profils = charger_profils()
             for uid in urgence_active["membres"]:
@@ -175,7 +175,7 @@ async def verifier_temps_missions():
                 initialiser_profil(uid, profils)
                 profils[str(uid)]["echouees"][m_info["cat"]] += 1
                 ajouter_historique(uid, profils, m_info["texte"], "Échec")
-            saved_profiles = sauvegarder_profils(profils)
+            sauvegarder_profils(profils)
 
             role_instructeur = discord.utils.get(channel.guild.roles, name="Instructeur")
             await channel.send(
@@ -238,8 +238,8 @@ async def on_message(message):
                 "`!missionfinit @joueur`\n↳ Valide définitivement l'urgence ou la quête du joueur.\n\n"
                 "`!missionechec @joueur`\n↳ Invalide la quête : elle retourne dans le panier et inflige 1 point de malus d'échec.\n\n"
                 "🛠️ **AJUSTEMENTS DES COUNTERS**\n"
-                "`!addpoints @joueur <reussies/echouees> <nombre>`\n↳ Ajoute manuellement des points à un membre.\n\n"
-                "`!delpoints @joueur <reussies/echouees> <nombre>`\n↳ Retire des points du compteur d'un membre.\n\n"
+                "`!addpoints @joueur <difficulté> <reussies/echouees> <nombre>`\n↳ Ajoute manuellement des points à un membre.\n\n"
+                "`!delpoints @joueur <difficulté> <reussies/echouees> <nombre>`\n↳ Retire des points du compteur d'un membre.\n\n"
                 "📂 **BASE DE DONNÉES DES MISSIONS**\n"
                 "`!listemissions`\n↳ Liste l'intégralité des quêtes enregistrées par catégorie.\n\n"
                 "`!addmission <difficulté> <texte> pendant <temps>`\n↳ Enregistre un nouveau décret (Ex: `commune Miner du fer pendant 1h`).\n\n"
@@ -254,49 +254,61 @@ async def on_message(message):
     if content_lower.startswith("!addpoints"):
         if not message.author.guild_permissions.administrator: return
         mots = content.split()
-        if len(mots) < 4 or not message.mentions:
-            await message.channel.send("❌ Usage : `!addpoints @joueur <reussies/echouees> <quantité>`")
+        if len(mots) < 5 or not message.mentions:
+            await message.channel.send("❌ Usage : `!addpoints @joueur <difficulté> <reussies/echouees> <quantité>`")
             return
         cible = message.mentions[0]
-        type_point = mots[2].lower()
+        cat = mots[2].lower()
+        if cat in ["commun", "commune"]: cat = "commune"
+        elif cat in ["moyen", "moyenne"]: cat = "moyenne"
+        elif cat not in ["difficile", "royal", "urgence"]:
+            await message.channel.send("❌ Catégorie invalide (`commune`, `moyenne`, `difficile`, `royal`, `urgence`).")
+            return
+        type_point = mots[3].lower()
         if type_point not in ["reussies", "reussie", "echouees", "echouee"]:
-            await message.channel.send("❌ Choisi entre `reussies` ou `echouees`.")
+            await message.channel.send("❌ Choisis entre `reussies` ou `echouees`.")
             return
         if type_point == "reussie": type_point = "reussies"
         if type_point == "echouee": type_point = "echouees"
-        try: qte = int(mots[3])
+        try: qte = int(mots[4])
         except ValueError: return
         profils = charger_profils()
         initialiser_profil(cible.id, profils)
-        profils[str(cible.id)][type_point]["commune"] += qte
+        profils[str(cible.id)][type_point][cat] += qte
         sauvegarder_profils(profils)
-        ajouter_historique(cible.id, profils, f"Points ajoutés par l'administration (+{qte})", "Modif Admin")
-        await message.channel.send(f"✅ Ajustement fait : `+{qte}` {type_point} pour {cible.mention}.")
+        ajouter_historique(cible.id, profils, f"Points ajoutés par l'administration (+{qte} {cat})", "Modif Admin")
+        await message.channel.send(f"✅ Ajustement fait : `+{qte}` en {cat} ({type_point}) pour {cible.mention}.")
         return
 
     if content_lower.startswith("!delpoints"):
         if not message.author.guild_permissions.administrator: return
         mots = content.split()
-        if len(mots) < 4 or not message.mentions:
-            await message.channel.send("❌ Usage : `!delpoints @joueur <reussies/echouees> <quantité>`")
+        if len(mots) < 5 or not message.mentions:
+            await message.channel.send("❌ Usage : `!delpoints @joueur <difficulté> <reussies/echouees> <quantité>`")
             return
         cible = message.mentions[0]
-        type_point = mots[2].lower()
+        cat = mots[2].lower()
+        if cat in ["commun", "commune"]: cat = "commune"
+        elif cat in ["moyen", "moyenne"]: cat = "moyenne"
+        elif cat not in ["difficile", "royal", "urgence"]:
+            await message.channel.send("❌ Catégorie invalide (`commune`, `moyenne`, `difficile`, `royal`, `urgence`).")
+            return
+        type_point = mots[3].lower()
         if type_point not in ["reussies", "reussie", "echouees", "echouee"]:
-            await message.channel.send("❌ Choisi entre `reussies` ou `echouees`.")
+            await message.channel.send("❌ Choisis entre `reussies` ou `echouees`.")
             return
         if type_point == "reussie": type_point = "reussies"
         if type_point == "echouee": type_point = "echouees"
-        try: qte = int(mots[3])
+        try: qte = int(mots[4])
         except ValueError: return
         profils = charger_profils()
         initialiser_profil(cible.id, profils)
-        actuel = profils[str(cible.id)][type_point]["commune"]
+        actuel = profils[str(cible.id)][type_point][cat]
         nouveau = max(0, actuel - qte)
-        profils[str(cible.id)][type_point]["commune"] = nouveau
+        profils[str(cible.id)][type_point][cat] = nouveau
         sauvegarder_profils(profils)
-        ajouter_historique(cible.id, profils, f"Points retirés par l'administration (-{qte})", "Modif Admin")
-        await message.channel.send(f"✅ Ajustement fait : Retrait de `{qte}` {type_point} pour {cible.mention}.")
+        ajouter_historique(cible.id, profils, f"Points retirés par l'administration (-{qte} {cat})", "Modif Admin")
+        await message.channel.send(f"✅ Ajustement fait : Retrait de `{qte}` en {cat} ({type_point}) pour {cible.mention}.")
         return
 
     # --- ÉTAT DES MISSIONS ---
@@ -343,7 +355,7 @@ async def on_message(message):
     if content_lower.startswith("!urgence"):
         if not message.author.guild_permissions.administrator: return
         texte_total = content[9:].strip()
-        if "pour dans" not in texte_total.lower():
+        if "pour dans" not in text_total.lower():
             await message.channel.send("❌ Format invalide. Exemple : `!urgence <texte> pour dans 2h`")
             return
         index_pour = texte_total.lower().rfind("pour dans")
@@ -639,49 +651,52 @@ async def on_message(message):
         cible = message.mentions[0] if message.mentions else message.author
         profils = charger_profils()
         initialiser_profil(cible.id, profils)
-        s_id = str(cible.id)
         
-        r = profils[s_id]["reussies"]
-        e = profils[s_id]["echouees"]
+        stats = profils[str(cible.id)]
+        rang = calculer_rang(stats)
         
-        reussies_totales = sum(r.values())
-        echouees_totales = sum(e.values())
+        reussies_totales = sum(stats["reussies"].values())
+        echouees_totales = sum(stats["echouees"].values())
         total_missions = reussies_totales + echouees_totales
         taux_reussite = int((reussies_totales / total_missions) * 100) if total_missions > 0 else 100
         
-        rang = calculer_rang(profils[s_id])
-        
-        embed = discord.Embed(title=f"📜 PARCHEMIN DE CITOYEN — {cible.display_name}", color=discord.Color.blue())
-        embed.set_thumbnail(url=cible.display_avatar.url if cible.display_avatar else None)
+        embed = discord.Embed(title=f"⚜️ PROFIL CITOYEN — {cible.display_name} ⚜️", color=discord.Color.blue())
+        embed.set_thumbnail(url=cible.display_avatar.url)
         embed.add_field(name="🎖️ Rang Militaire", value=f"**{rang}**", inline=False)
         
-        stats_txt = (
-            f"🟢 **Réussies :** `{reussies_totales}`\n"
-            f"↳ *Communes: {r['commune']} | Moyennes: {r['moyenne']} | Difficiles: {r['difficile']} | Royales: {r['royal']} | Urgences: {r['urgence']}*\n\n"
-            f"🔴 **Échouées :** `{echouees_totales}`\n"
-            f"↳ *Communes: {e['commune']} | Moyennes: {e['moyenne']} | Difficiles: {e['difficile']} | Royales: {e['royal']} | Urgences: {e['urgence']}*\n\n"
-            f"📈 **Taux d'Efficacité :** `{taux_reussite}%`"
+        missions_txt = (
+            f"🟢 **Réussies :** {reussies_totales}\n"
+            f"↳ *Communes: {stats['reussies']['commune']} | Moyennes: {stats['reussies']['moyenne']} | Difficiles: {stats['reussies']['difficile']} | Royales: {stats['reussies']['royal']} | Urgences: {stats['reussies']['urgence']}*\n\n"
+            f"🔴 **Échouées :** {echouees_totales}\n"
+            f"↳ *Communes: {stats['echouees']['commune']} | Moyennes: {stats['echouees']['moyenne']} | Difficiles: {stats['echouees']['difficile']} | Royales: {stats['echouees']['royal']} | Urgences: {stats['echouees']['urgence']}*"
         )
-        embed.add_field(name="📊 Statistiques de Service", value=stats_txt, inline=False)
+        embed.add_field(name="⚔️ Statistiques des Décrets", value=missions_txt, inline=False)
+        embed.add_field(name="📈 Taux d'Efficacité", value=f"`{taux_reussite}%` de réussite globale", inline=True)
+        
         await message.channel.send(embed=embed)
         return
 
-    # --- CONSULTATION HISTORIQUE ---
+    # --- HISTORIQUE DES ACTIONS ---
     if content_lower == "!historique":
+        joueur = message.author
         profils = charger_profils()
-        initialiser_profil(message.author.id, profils)
-        hist = profils[str(message.author.id)]["historique"]
+        initialiser_profil(joueur.id, profils)
+        hist = profils[str(joueur.id)]["historique"]
         
+        embed = discord.Embed(title=f"📜 PARCHEMIN D'ARMES — {joueur.display_name}", color=discord.Color.light_grey())
         if not hist:
-            await message.channel.send("📜 Ton parchemin d'historique est totalement vierge pour le moment.")
-            return
-            
-        reponse = f"📜 **LES 5 DERNIÈRES ACTIONS DE {message.author.mention} :**\n"
-        for idx, act in enumerate(hist, 1):
-            emoji = "✅" if act["statut"] in ["Succès", "Modif Admin"] else "❌"
-            reponse += f"**{idx}.** {emoji} [{act['date']}] *{act['texte']}* — **{act['statut']}**\n"
-        await message.channel.send(reponse)
+            embed.description = "*Aucune action enregistrée dans les archives.*"
+        else:
+            for item in hist:
+                statut_emoji = "✅" if item["statut"] == "Succès" else "❌" if item["statut"] == "Échec" else "⚙️"
+                embed.add_field(name=f"{statut_emoji} [{item['date']}] - {item['statut']}", value=f"*{item['texte']}*", inline=False)
+        await message.channel.send(embed=embed)
         return
-await bot.process_commands(message)
+
+# Lancement du serveur Web et du Bot
 keep_alive()
-bot.run("TON_TOKEN_DISCORD_ICI")
+token = os.environ.get("DISCORD_TOKEN")
+if token:
+    bot.run(token)
+else:
+    print("Erreur : Aucun token Discord trouvé dans les variables d'environnement.")
