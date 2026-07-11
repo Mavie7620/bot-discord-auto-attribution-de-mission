@@ -115,7 +115,6 @@ async def action_accepter_mission(joueur_id, channel):
 async def action_refuser_mission(joueur_id, channel):
     if joueur_id in missions_actives:
         m_info = missions_actives[joueur_id]
-        # Modifié : On ne réinjecte plus dans le fichier car la mission n'en sort jamais
         profils = charger_profils()
         initialiser_profil(joueur_id, profils)
         profils[str(joueur_id)]["total_echouees"] += 1
@@ -157,7 +156,6 @@ async def verifier_temps_missions():
 
         if maintenant > date_fin:
             missions_a_retirer.append(joueur_id)
-            # Modifié : On ne réinjecte plus dans le fichier ici non plus
             profils = charger_profils()
             initialiser_profil(joueur_id, profils)
             profils[str(joueur_id)]["total_echouees"] += 1
@@ -246,7 +244,6 @@ class VueChoixDifficulte(discord.ui.View):
             await interaction.response.send_message(f"❌ Plus de mission disponible dans la catégorie `{cat.upper()}`.", ephemeral=True)
             return
 
-        # Modifié : On sélectionne au hasard sans retirer (.pop) pour que la mission reste réutilisable
         mission_choisie = random.choice(missions_dispo[cat])
 
         duree = extraire_duree(mission_choisie["delai"])
@@ -380,7 +377,7 @@ async def on_message(message):
     content = message.content.strip()
     content_lower = content.lower()
 
-    if "🪖-ordre-" in message.channel.name and message.attachments:
+    if message.channel.name and "🪖-ordre-" in message.channel.name and message.attachments:
         joueur_id = message.author.id
         if joueur_id in missions_actives and missions_actives[joueur_id].get("en_attente", False):
             await message.channel.send(
@@ -443,7 +440,7 @@ async def on_message(message):
             await message.channel.send("❌ Format incorrect. Exemple : `!missionpreuve @joueur`")
             return
         cible = message.mentions[0]
-        reussite = await action_preuve = await action_demander_preuve(cible.id, message.channel, message.guild)
+        reussite = await action_demander_preuve(cible.id, message.channel, message.guild)
         if not reussite: await message.channel.send("❌ Aucun objectif en cours trouvé pour ce joueur.")
         return
 
