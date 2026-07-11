@@ -437,18 +437,20 @@ async def on_message(message):
         embed = discord.Embed(title="⚜️ TABLEAU DES ORDRES DE MADAGASCAR ⚜️", color=discord.Color.gold())
         
         citoyen_desc = (
-            "⚔️ **SYSTÈME DE QUÊTES**\n"
+            "⚔️ **\u200bSYSTÈME DE QUÊTES**\n"
             "Clique sur le bouton ci-dessous pour ouvrir un salon de quête privé.\n\n"
-            "`!missionacomplis` ou via les boutons sous ton chrono.\n\n"
-            "`!missions_en_cours`\n↳ Affiche le statut complet de ta tâche active.\n\n"
+            "`!missionacomplis` ou via les boutons sous ton chrono.\n"
+            "`!missions_en_cours` ↳ Statut complet de ta tâche active.\n"
+            "`!tuto` ↳ Guide d'utilisation du système de décrets.\n\n"
             "📊 **ARCHIVES PERSONNELLES**\n"
-            "`!historique [@joueur]`\n↳ Consultez votre bilan d'objectifs personnels."
+            "`!historique [@joueur]` ↳ Consultez votre bilan d'objectifs."
         )
         embed.add_field(name="👥 ESPACE DES CITOYENS", value=citoyen_desc, inline=False)
         
         if verifier_permissions_staff(message.author):
             admin_desc = (
                 "🚨 **HAUT COMMANDEMENT (ADMIN / INSTRUCTEUR)**\n"
+                "`!tutoadm` ↳ Consulter le manuel de gestion de l'administration.\n"
                 "`!missionaccepter @joueur` ↳ Valide la mission manuellement.\n"
                 "`!missionrefuser @joueur`  ↳ Annule la mission avec échec.\n"
                 "`!missionpreuve @joueur`   ↳ Débloque le salon et exige un screen.\n\n"
@@ -619,7 +621,7 @@ async def on_message(message):
     if content_lower.startswith("!addmission"):
         if not verifier_permissions_staff(message.author): return
         texte_total = content[11:].strip()
-        mots = texte_total.split()
+        mots = text_total.split()
         if len(mots) < 4 or "pendant" not in texte_total.lower():
             await message.channel.send("❌ Format incorrect. Exemple : `!addmission commune Miner 50 diamants pendant 2h`")
             return
