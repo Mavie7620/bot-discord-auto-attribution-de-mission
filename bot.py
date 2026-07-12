@@ -1,5 +1,6 @@
 import discord
 from discord.ext import commands, tasks
+from discord import app_commands
 import random
 import os
 import json
@@ -416,282 +417,254 @@ async def on_ready():
     if not verifier_temps_missions.is_running(): verifier_temps_missions.start()
     bot.add_view(VueBoutonTicket())
     bot.add_view(VueFermerTicket())
-    print("Bot MADAmission Pro — Prêt et vérifié !")
+    try:
+        synced = await bot.tree.sync()
+        print(f"Bot MADAmission Pro — {len(synced)} Commandes Slash synchronisées !")
+    except Exception as e:
+        print(f"Erreur de synchronisation slash: {e}")
 
 @bot.event
 async def on_message(message):
-    global missions_dispo
     if message.author.bot: return
-    content = message.content.strip()
-    content_lower = content.lower()
-
     if message.channel.name and "🪖-ordre-" in message.channel.name and message.attachments:
         joueur_id = message.author.id
         if joueur_id in missions_actives and missions_actives[joueur_id].get("en_attente", False):
             await message.channel.send(f"💬 {message.author.mention}, un instructeur a été ping. Votre demande a bien été envoyée et va être traitée.")
-            
             msg_p = f"📸 **Preuve reçue** pour la mission de <@{joueur_id}>. En attente de l'analyse finale de l'administration :"
             await envoyer_double_notification(message.guild, msg_p, f"📸 Preuve d'accomplissement déposée par <@{joueur_id}> dans {message.channel.mention}.", view=VueEvaluationMission(joueur_id))
 
-    if content_lower in ["!aide", "!help"]:
-        embed = discord.Embed(title="⚜️ TABLEAU DES ORDRES DE MADAGASCAR ⚜️", color=discord.Color.gold())
-        
-        citoyen_desc = (
-            "⚔️ **\u200bSYSTÈME DE QUÊTES**\n"
-            "Clique sur le bouton ci-dessous pour ouvrir un salon de quête privé.\n\n"
-            "`!missionacomplis` ou via les boutons sous ton chrono.\n"
-            "`!missions_en_cours` ↳ Statut complet de ta tâche active.\n"
-            "`!tuto` ↳ Guide d'utilisation du système de décrets.\n\n"
-            "📊 **ARCHIVES PERSONNELLES**\n"
-            "`!historique [@joueur]` ↳ Consultez votre bilan d'objectifs."
+# --- COMMANDES SLASH CITOYENS ---
+
+@bot.tree.command(name="aide", description="Affiche le tableau de bord des quêtes de Madagascar.")
+async def aide(interaction: discord.Interaction):
+    embed = discord.Embed(title="⚜️ TABLEAU DES ORDRES DE MADAGASCAR ⚜️", color=discord.Color.gold())
+    citoyen_desc = (
+        "⚔️ **SYSTÈME DE QUÊTES**\n"
+        "Ouvre un ticket d'ordre privé dans la catégorie dédiée.\n\n"
+        "`/missionaccomplie` ↳ Déclarer la fin de ta tâche active.\n"
+        "`/missions_en_cours` ↳ Statut complet de ton contrat.\n"
+        "`/tuto` ↳ Guide complet du citoyen.\n\n"
+        "📊 **ARCHIVES PERSONNELLES**\n"
+        "`/historique` ↳ Consulte ton bilan d'objectifs."
+    )
+    embed.add_field(name="👥 ESPACE DES CITOYENS", value=citoyen_desc, inline=False)
+    if verifier_permissions_staff(interaction.user):
+        admin_desc = (
+            "🚨 **HAUT COMMANDEMENT (ADMIN / INSTRUCTEUR)**\n"
+            "`/tutoadm` ↳ Manuel de l'administration.\n"
+            "`/missionaccepter` ↳ Forcer le succès d'un joueur.\n"
+            "`/missionrefuser` ↳ Forcer l'échec d'un joueur.\n"
+            "`/missionpreuve` ↳ Exiger un screen.\n\n"
+            "📂 **BASE DE DONNÉES**\n"
+            "`/listemissions` | `/addmission` | `/delmission`"
         )
-        embed.add_field(name="👥 ESPACE DES CITOYENS", value=citoyen_desc, inline=False)
-        
-        if verifier_permissions_staff(message.author):
-            admin_desc = (
-                "🚨 **HAUT COMMANDEMENT (ADMIN / INSTRUCTEUR)**\n"
-                "`!tutoadm` ↳ Consulter le manuel de gestion de l'administration.\n"
-                "`!missionaccepter @joueur` ↳ Valide la mission manuellement.\n"
-                "`!missionrefuser @joueur`  ↳ Annule la mission avec échec.\n"
-                "`!missionpreuve @joueur`   ↳ Débloque le salon et exige un screen.\n\n"
-                "📂 **BASE DE DONNÉES DES MISSIONS**\n"
-                "`!listemissions` | `!addmission` | `!delmission`"
-            )
-            embed.add_field(name="👑 ADMINISTRATION", value=admin_desc, inline=False)
+        embed.add_field(name="👑 ADMINISTRATION", value=admin_desc, inline=False)
+    await interaction.response.send_message(embed=embed, view=VueBoutonTicket())
+
+@bot.tree.command(name="tuto", description="Guide d'utilisation pour mener à bien tes décrets.")
+async def tuto(interaction: discord.Interaction):
+    embed_tuto = discord.Embed(
+        title="🪖 GUIDE DU CITOYEN DE MADAGASCAR 🪖",
+        description="Suis ces instructions impériales pour mener à bien tes décrets sans subir les foudres de l'Article V !",
+        color=discord.Color.green()
+    )
+    embed_tuto.add_field(
+        name="🎫 Étape 1 : Ouvrir l'Ordre",
+        value="Rends-toi dans la catégorie **⚜️ == [ 𝕸𝖎𝖘𝖘𝖎𝖔𝖓𝖘 ] ==** et utilise `/aide` pour obtenir le bouton vert d'ouverture de ticket.",
+        inline=False
+    )
+    embed_tuto.add_field(
+        name="📜 Étape 2 : Sélectionner sa Difficulté",
+        value="Dans ton ticket, choisis ton contrat : `Commune`, `Moyenne`, `Difficile` ou `Royal`. Le chrono démarre instantanément !",
+        inline=False
+    )
+    embed_tuto.add_field(
+        name="🏁 Étape 3 : Déclarer l'accomplissement",
+        value="Une fois ton objectif réalisé en jeu, utilise le bouton vert **Finir la mission** ou la commande `/missionaccomplie`.",
+        inline=False
+    )
+    embed_tuto.set_footer(text="Madagascar • Que la fortune te sourie")
+    await interaction.response.send_message(embed=embed_tuto)
+
+@bot.tree.command(name="missions_en_cours", description="Affiche le statut de votre mission active.")
+async def missions_en_cours(interaction: discord.Interaction):
+    joueur_id = interaction.user.id
+    if joueur_id not in missions_actives:
+        await interaction.response.send_message("White flag ⚪ Tu n'as aucune mission active actuellement.", ephemeral=True)
+        return
+    m = missions_actives[joueur_id]
+    ts = int(m["date_fin"].timestamp())
+    if m.get("en_attente", False):
+        await interaction.response.send_message(f"👤 <@{joueur_id}> [**{m['cat'].upper()}**] -> *\"{m['texte']}\"* 🛑 **GELÉ (En attente d'évaluation)**")
+    else:
+        await interaction.response.send_message(f"👤 <@{joueur_id}> [**{m['cat'].upper()}**] -> *\"{m['texte']}\"* Fin : <t:{ts}:R>")
+
+@bot.tree.command(name="missionaccomplie", description="Déclare l'objectif en cours comme accompli.")
+async def missionaccomplie(interaction: discord.Interaction):
+    joueur = interaction.user
+    role_instructeur = discord.utils.get(interaction.guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]")
+    mention_ins = role_instructeur.mention if role_instructeur else '@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]'
+    
+    if joueur.id in missions_actives:
+        m_info = missions_actives[joueur.id]
+        if not m_info.get("en_attente", False):
+            m_info["en_attente"] = True
+            m_info["moment_gel"] = datetime.now()
             
-        await message.channel.send(embed=embed, view=VueBoutonTicket())
-        return
-
-    # --- COMMANDE !TUTO (CITOYEN - ACCESSIBLE À TOUS) ---
-    if content_lower == "!tuto":
-        embed_tuto = discord.Embed(
-            title="🪖 GUIDE DU CITOYEN DE MADAGASCAR 🪖",
-            description="Suis ces instructions impériales pour mener à bien tes décrets sans subir les foudres de l'Article V !",
-            color=discord.Color.green()
-        )
-        embed_tuto.add_field(
-            name="🎫 Étape 1 : Ouvrir l'Ordre",
-            value="Rends-toi dans la catégorie **⚜️ == [ 𝕸𝖎𝖘𝖘𝖎𝖔𝖓𝖘 ] ==** et utilise la commande `!aide` pour faire apparaître le bouton de ticket. Clique dessus pour générer ton salon privé `🪖-ordre-tonpseudo`.",
-            inline=False
-        )
-        embed_tuto.add_field(
-            name="📜 Étape 2 : Sélectionner sa Difficulté",
-            value="Dans ton ticket, choisis ton contrat parmi les difficultés disponibles : `Commune`, `Moyenne`, `Difficile` ou `Royal`. **Attention, le chrono démarre instantanément dès ton clic !**",
-            inline=False
-        )
-        embed_tuto.add_field(
-            name="🏁 Étape 3 : Déclarer l'accomplissement",
-            value="Une fois ton objectif réalisé en jeu :\n"
-                  "1. Clique sur **🏁 Finir la mission** (ou tape `!missionacomplis`). Ton chrono se mettra en pause.\n"
-                  "2. Si un instructeur réclame une preuve, le bot te le dira. Dépose simplement ton image/screen dans le salon !",
-            inline=False
-        )
-        embed_tuto.add_field(
-            name="🚨 Rappel sur l'Article V",
-            value="Tout abandon volontaire via le bouton rouge ou dépassement du temps réglementaire se soldera par un **Échec** consigné dans ton dossier.",
-            inline=False
-        )
-        embed_tuto.set_footer(text="Madagascar • Que la fortune te sourie")
-        await message.channel.send(embed=embed_tuto)
-        return
-
-    # --- COMMANDE !TUTOADM (STAFF UNIQUEMENT) ---
-    if content_lower == "!tutoadm":
-        if not verifier_permissions_staff(message.author):
-            await message.channel.send("❌ Tu n'as pas l'autorité nécessaire pour consulter le manuel du Haut Commandement.")
-            return
-
-        embed_tuto = discord.Embed(
-            title="👑 MANUEL DE L'ADMINISTRATION & DE L'INSTRUCTION 👑",
-            description="Ce guide récapitule vos privilèges et devoirs pour encadrer le système de missions de Madagascar.",
-            color=discord.Color.red()
-        )
-        embed_tuto.add_field(
-            name="📥 1. Gestion des Demandes de Fin de Mission",
-            value="Lorsqu'un joueur déclare sa mission terminée, vous recevez une alerte dans `#validation-mission` contenant **3 boutons** :\n"
-                  "🔹 `Accepter` : Clôture le ticket en succès (+1 point historique).\n"
-                  "🔹 `Refuser` : Clôture le ticket en échec (applique l'Article V).\n"
-                  "🔹 `Demander des preuves` : Rouvre temporairement l'accès à l'écriture pour le joueur afin qu'il envoie une capture d'écran.",
-            inline=False
-        )
-        embed_tuto.add_field(
-            name="🛠️ 2. Commandes Manuelles Prioritaires",
-            value="Si l'interface de boutons échoue, utilisez ces commandes textuelles n'importe où :\n"
-                  "• `!missionaccepter @joueur` -> Force le succès.\n"
-                  "• `!missionrefuser @joueur` -> Force la défaite.\n"
-                  "• `!missionpreuve @joueur` -> Force la réouverture du salon pour preuve.",
-            inline=False
-        )
-        embed_tuto.add_field(
-            name="📂 3. Maintenance du Catalogue des Décrets",
-            value="• `!listemissions` : Affiche l'index de toutes les missions enregistrées.\n"
-                  "• `!addmission [catégorie] [texte] pendant [temps]` : Ajoute une mission.\n"
-                  "  *Exemple : `!addmission royal Construire un château pendant 3j`*\n"
-                  "• `!delmission [catégorie] [numéro]` : Supprime la mission correspondante selon la liste.",
-            inline=False
-        )
-        embed_tuto.set_footer(text="Madagascar • Mode Administration Active")
-        await message.channel.send(embed=embed_tuto)
-        return
-
-    # --- COMMANDES MANUELLES STAFF ---
-
-    if content_lower.startswith("!missionaccepter"):
-        if not verifier_permissions_staff(message.author): return
-        if not message.mentions:
-            await message.channel.send("❌ Format incorrect. Exemple : `!missionaccepter @joueur`")
-            return
-        cible = message.mentions[0]
-        reussite = await action_accepter_mission(cible.id, message.channel)
-        if not reussite: await message.channel.send("❌ Aucun objectif en cours trouvé pour ce joueur.")
-        return
-
-    if content_lower.startswith("!missionrefuser"):
-        if not verifier_permissions_staff(message.author): return
-        if not message.mentions:
-            await message.channel.send("❌ Format incorrect. Exemple : `!missionrefuser @joueur`")
-            return
-        cible = message.mentions[0]
-        reussite = await action_refuser_mission(cible.id, message.channel)
-        if not reussite: await message.channel.send("❌ Aucun objectif en cours trouvé pour ce joueur.")
-        return
-
-    if content_lower.startswith("!missionpreuve"):
-        if not verifier_permissions_staff(message.author): return
-        if not message.mentions:
-            await message.channel.send("❌ Format incorrect. Exemple : `!missionpreuve @joueur`")
-            return
-        cible = message.mentions[0]
-        reussite = await action_demander_preuve(cible.id, message.channel, message.guild)
-        if not reussite: await message.channel.send("❌ Aucun objectif en cours trouvé pour ce joueur.")
-        return
-
-    # --- COMMANDES DE BASE ---
-
-    if content_lower == "!missions_en_cours":
-        if message.author.id not in missions_actives:
-            await message.channel.send("⚪ Tu n'as aucune mission active actuellement.")
-            return
-            
-        m = missions_actives[message.author.id]
-        ts = int(m["date_fin"].timestamp())
+        await interaction.channel.set_permissions(joueur, read_messages=True, send_messages=False)
+        await interaction.response.send_message(f"💬 {joueur.mention}, votre demande a été envoyée aux instructeurs. Votre chrono est gelé.")
         
-        if m.get("en_attente", False):
-            await message.channel.send(f"👤 <@{message.author.id}> [**{m['cat'].upper()}**] -> *\"{m['texte']}\"* 🛑 **GELÉ (En attente d'évaluation)**")
+        msg_comp = (
+            f"📢 {mention_ins} ! {joueur.mention} déclare avoir fini sa mission : *\"{m_info['texte']}\"* !\n"
+            f"⏱️ **Le chrono est mis en pause.** Choisissez l'action appropriée :"
+        )
+        await envoyer_double_notification(interaction.guild, msg_comp, f"📢 {mention_ins} — <@{joueur.id}> a fini sa mission : *\"{m_info['texte']}\"* dans {interaction.channel.mention}", view=VueEvaluationMission(joueur.id))
+        return
+    await interaction.response.send_message("❌ Tu n'as aucune mission active en cours.", ephemeral=True)
+
+@bot.tree.command(name="historique", description="Affiche l'historique de vos décrets passés ou d'un autre joueur.")
+@app_commands.describe(joueur="Le joueur dont vous voulez voir le casier.")
+async def historique(interaction: discord.Interaction, joueur: discord.Member = None):
+    cible = joueur or interaction.user
+    profils = charger_profils()
+    initialiser_profil(cible.id, profils)
+    
+    userData = profils[str(cible.id)]
+    hist = userData["historique"]
+    
+    embed = discord.Embed(title=f"📜 ARCHIVES ET PARCHEMIN — {cible.display_name}", color=discord.Color.blue())
+    embed.set_thumbnail(url=cible.display_avatar.url)
+    embed.add_field(name="📊 Bilan des Objectifs", value=f"🟢 **RÉUSSITES :** `{userData['total_reussies']}`\n🔴 **ÉCHOUÉES :** `{userData['total_echouees']}`", inline=False)
+    
+    if not hist:
+        embed.add_field(name="📜 Historique des Décrets", value="*Aucune mission enregistrée dans le grand registre.*", inline=False)
+    else:
+        hist_lignes = [("✅" if item["statut"] == "Succès" else "❌") + f" **[{item['date']}]** — {item['texte']}" for item in hist]
+        corps_historique = "\n".join(hist_lignes)
+        if len(corps_historique) > 1024: corps_historique = corps_historique[:1000] + "\n*...*"
+        embed.add_field(name="📜 Historique des Décrets", value=corps_historique, inline=False)
+        
+    await interaction.response.send_message(embed=embed)
+
+# --- COMMANDES SLASH STAFF (ADMINISTRATION & INSTRUCTEURS) ---
+
+@bot.tree.command(name="tutoadm", description="Manuel réglementaire pour l'administration des ordres.")
+async def tutoadm(interaction: discord.Interaction):
+    if not verifier_permissions_staff(interaction.user):
+        await interaction.response.send_message("❌ Tu n'as pas l'autorité nécessaire.", ephemeral=True)
+        return
+    embed_tuto = discord.Embed(
+        title="👑 MANUEL DE L'ADMINISTRATION & DE L'INSTRUCTION 👑",
+        description="Ce guide récapitule vos privilèges pour encadrer le système de missions de Madagascar.",
+        color=discord.Color.red()
+    )
+    embed_tuto.add_field(
+        name="📥 1. Gestion des Demandes",
+        value="Lorsqu'un joueur finit son ordre, l'alerte dans `#validation-mission` contient les boutons d'évaluation (`Accepter`, `Refuser`, `Demander des preuves`).",
+        inline=False
+    )
+    embed_tuto.add_field(
+        name="🛠️ 2. Commandes d'Urgence Manuelles",
+        value="`/missionaccepter [joueur]` -> Clôture en Succès.\n`/missionrefuser [joueur]` -> Clôture en Échec.\n`/missionpreuve [joueur]` -> Réouvre le salon pour screen.",
+        inline=False
+    )
+    await interaction.response.send_message(embed=embed_tuto, ephemeral=True)
+
+@bot.tree.command(name="missionaccepter", description="Valide et force manuellement le succès de la mission d'un joueur.")
+@app_commands.describe(joueur="Le citoyen à valider")
+async def missionaccepter(interaction: discord.Interaction, joueur: discord.Member):
+    if not verifier_permissions_staff(interaction.user):
+        await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
+        return
+    await interaction.response.defer()
+    reussite = await action_accepter_mission(joueur.id, interaction.channel)
+    if reussite:
+        await interaction.followup.send(f"✅ Mission de {joueur.mention} acceptée manuellement.")
+    else:
+        await interaction.followup.send("❌ Ce joueur n'a aucune mission active.")
+
+@bot.tree.command(name="missionrefuser", description="Force manuellement l'échec de la mission d'un joueur.")
+@app_commands.describe(joueur="Le citoyen à pénaliser")
+async def missionrefuser(interaction: discord.Interaction, joueur: discord.Member):
+    if not verifier_permissions_staff(interaction.user):
+        await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
+        return
+    await interaction.response.defer()
+    reussite = await action_refuser_mission(joueur.id, interaction.channel)
+    if reussite:
+        await interaction.followup.send(f"❌ Mission de {joueur.mention} refusée avec échec consigné.")
+    else:
+        await interaction.followup.send("❌ Ce joueur n'a aucune mission active.")
+
+@bot.tree.command(name="missionpreuve", description="Exige l'envoi d'une capture d'écran de preuve dans le ticket.")
+@app_commands.describe(joueur="Le citoyen ciblé")
+async def missionpreuve(interaction: discord.Interaction, joueur: discord.Member):
+    if not verifier_permissions_staff(interaction.user):
+        await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
+        return
+    await interaction.response.defer()
+    reussite = await action_demander_preuve(joueur.id, interaction.channel, interaction.guild)
+    if reussite:
+        await interaction.followup.send(f"📸 Demande de preuve transmise à {joueur.mention}.")
+    else:
+        await interaction.followup.send("❌ Ce joueur n'a aucune mission active.")
+
+@bot.tree.command(name="listemissions", description="Affiche l'index complet du catalogue des décrets.")
+async def listemissions(interaction: discord.Interaction):
+    if not verifier_permissions_staff(interaction.user):
+        await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
+        return
+    global missions_dispo
+    missions_dispo = charger_missions_fichier()
+    reponse = "⚜️ **ARCHIVES DES MISSIONS DISPONIBLES** ⚜️\n"
+    for cat in ["commune", "moyenne", "difficile", "royal"]:
+        reponse += f"\n__**{cat.upper()} :**__\n"
+        if not missions_dispo[cat]: reponse += "*Aucune mission disponible*\n"
         else:
-            await message.channel.send(f"👤 <@{message.author.id}> [**{m['cat'].upper()}**] -> *\"{m['texte']}\"* Fin : <t:{ts}:R>")
-        return
+            for i, m in enumerate(missions_dispo[cat], start=1): reponse += f"**{i}.** {m['texte']} *(Délai : {m['delai']})*\n"
+    await interaction.response.send_message(reponse[:2000], ephemeral=True)
 
-    if content_lower == "!missionacomplis":
-        joueur = message.author
-        role_instructeur = discord.utils.get(message.guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]")
-        mention_ins = role_instructeur.mention if role_instructeur else '@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]'
-        
-        if joueur.id in missions_actives:
-            m_info = missions_actives[joueur.id]
-            if not m_info.get("en_attente", False):
-                m_info["en_attente"] = True
-                m_info["moment_gel"] = datetime.now()
-                
-            await message.channel.set_permissions(joueur, read_messages=True, send_messages=False)
-            await message.channel.send(f"💬 {joueur.mention}, un instructeur a été notifié. Votre demande va être traitée dans les plus brefs délais.")
-            
-            msg_comp = (
-                f"📢 {mention_ins} ! {joueur.mention} déclare avoir fini sa mission : *\"{m_info['texte']}\"* !\n"
-                f"⏱️ **Le chrono est mis en pause.** Choisissez l'action appropriée :"
-            )
-            await envoyer_double_notification(message.guild, msg_comp, f"📢 {mention_ins} — <@{joueur.id}> a fini sa mission : *\"{m_info['texte']}\"* dans {message.channel.mention}", view=VueEvaluationMission(joueur.id))
-            return
-            
-        await message.channel.send("❌ Tu n'as aucune mission active en cours.")
+@bot.tree.command(name="addmission", description="Ajoute une nouvelle quête au catalogue global.")
+@app_commands.describe(categorie="commune, moyenne, difficile, royal", texte="Contenu de l'objectif", temps="Exemple: 2h, 3j, 45min")
+async def addmission(interaction: discord.Interaction, categorie: str, texte: str, temps: str):
+    if not verifier_permissions_staff(interaction.user):
+        await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
         return
+    cat = categorie.lower().strip()
+    if cat in ["commune", "commun"]: cat = "commune"
+    elif cat in ["moyenne", "moyen"]: cat = "moyenne"
+    elif cat in ["difficile"]: cat = "difficile"
+    elif cat in ["royal", "royale"]: cat = "royal"
+    else:
+        await interaction.response.send_message("❌ Catégorie invalide.", ephemeral=True)
+        return
+    
+    sauvegarder_mission_fichier(cat, texte, temps)
+    global missions_dispo
+    missions_dispo = charger_missions_fichier()
+    await interaction.response.send_message(f"⚜️ **Mission ajoutée !** (`{cat}` : *{texte}* pendant {temps})")
 
-    if content_lower.startswith("!listemissions"):
-        if not verifier_permissions_staff(message.author): return
-        missions_dispo = charger_missions_fichier()
-        reponse = "⚜️ **ARCHIVES DES MISSIONS DISPONIBLES** ⚜️\n"
-        for cat in ["commune", "moyenne", "difficile", "royal"]:
-            reponse += f"\n__**{cat.upper()} :**__\n"
-            if not missions_dispo[cat]: reponse += "*Aucune mission disponible*\n"
-            else:
-                for i, m in enumerate(missions_dispo[cat], start=1): reponse += f"**{i}.** {m['texte']} *(Délai d'origine : {m['delai']})*\n"
-        await message.channel.send(reponse[:2000])
+@bot.tree.command(name="delmission", description="Supprime une mission existante du fichier de configuration.")
+@app_commands.describe(categorie="commune, moyenne, difficile, royal", numero="Le numéro affiché sur le /listemissions")
+async def delmission(interaction: discord.Interaction, categorie: str, numero: int):
+    if not verifier_permissions_staff(interaction.user):
+        await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
         return
-
-    if content_lower.startswith("!addmission"):
-        if not verifier_permissions_staff(message.author): return
-        texte_total = content[11:].strip()
-        mots = text_total.split()
-        if len(mots) < 4 or "pendant" not in texte_total.lower():
-            await message.channel.send("❌ Format incorrect. Exemple : `!addmission commune Miner 50 diamants pendant 2h`")
-            return
-        cat = mots[0].lower()
-        if cat in ["commune", "commun"]: cat = "commune"
-        elif cat in ["moyenne", "moyen"]: cat = "moyenne"
-        elif cat in ["difficile"]: cat = "difficile"
-        elif cat in ["royal", "royale"]: cat = "royal"
-        else:
-            await message.channel.send("❌ Catégorie inconnue (`commune`, `moyenne`, `difficile`, `royal`).")
-            return
-        
-        parties = texte_total.split(None, 1)[1].strip()
-        index_pendant = parties.lower().rfind("pendant")
-        texte_mission = parties[:index_pendant].strip()
-        delai = parties[index_pendant + 7:].strip()
-        
-        sauvegarder_mission_fichier(cat, texte_mission, delai)
-        missions_dispo = charger_missions_fichier()
-        await message.channel.send(f"⚜️ **Mission ajoutée au catalogue !** (`{cat}` : *{texte_mission}*)")
-        return
-
-    if content_lower.startswith("!delmission"):
-        if not verifier_permissions_staff(message.author): return
-        mots = content_lower.split()
-        if len(mots) < 3: 
-            await message.channel.send("❌ Format incorrect. Exemple : `!delmission commune 1`")
-            return
-        cat = mots[1]
-        if cat in ["commune", "commun"]: cat = "commune"
-        elif cat in ["moyenne", "moyen"]: cat = "moyenne"
-        elif cat in ["difficile"]: cat = "difficile"
-        elif cat in ["royal", "royale"]: cat = "royal"
-        try: numero = int(mots[2]) - 1
-        except ValueError: 
-            await message.channel.send("❌ Numéro de mission invalide.")
-            return
-        missions_dispo = charger_missions_fichier()
-        if cat in missions_dispo and 0 <= numero < len(missions_dispo[cat]):
-            retiree = missions_dispo[cat].pop(numero)
-            réécrire_toutes_missions(missions_dispo)
-            await message.channel.send(f"🗑️ Mission *\"{retiree['texte']}\"* supprimée avec succès.")
-        else:
-            await message.channel.send("❌ Numéro invalide ou mission introuvable.")
-        return
-
-    if content_lower.startswith("!historique"):
-        cible = message.mentions[0] if message.mentions else message.author
-        profils = charger_profils()
-        initialiser_profil(cible.id, profils)
-        
-        userData = profils[str(cible.id)]
-        hist = userData["historique"]
-        
-        embed = discord.Embed(title=f"📜 ARCHIVES ET PARCHEMIN — {cible.display_name}", color=discord.Color.blue())
-        embed.set_thumbnail(url=cible.display_avatar.url)
-        
-        cpt_txt = f"🟢 **Missions RÉUSSITES :** `{userData['total_reussies']}`\n🔴 **Missions ÉCHOUÉES :** `{userData['total_echouees']}`"
-        embed.add_field(name="📊 Bilan des Objectifs", value=cpt_txt, inline=False)
-        
-        if not hist:
-            embed.add_field(name="📜 Historique des Décrets", value="*Aucune mission enregistrée dans le grand registre.*", inline=False)
-        else:
-            hist_lignes = [("✅" if item["statut"] == "Succès" else "❌") + f" **[{item['date']}]** — {item['texte']}" for item in hist]
-            corps_historique = "\n".join(hist_lignes)
-            if len(corps_historique) > 1024: corps_historique = corps_historique[:1000] + "\n*...*"
-            embed.add_field(name="📜 Historique des Décrets", value=corps_historique, inline=False)
-            
-        await message.channel.send(embed=embed)
-        return
+    cat = categorie.lower().strip()
+    if cat in ["commune", "commun"]: cat = "commune"
+    elif cat in ["moyenne", "moyen"]: cat = "moyenne"
+    elif cat in ["difficile"]: cat = "difficile"
+    elif cat in ["royal", "royale"]: cat = "royal"
+    
+    index = numero - 1
+    global missions_dispo
+    missions_dispo = charger_missions_fichier()
+    if cat in missions_dispo and 0 <= index < len(missions_dispo[cat]):
+        retiree = missions_dispo[cat].pop(index)
+        réécrire_toutes_missions(missions_dispo)
+        await interaction.response.send_message(f"🗑️ Mission *\"{retiree['texte']}\"* supprimée de l'index.")
+    else:
+        await interaction.response.send_message("❌ Numéro introuvable dans cette catégorie.", ephemeral=True)
 
 keep_alive()
 token = os.environ.get("DISCORD_TOKEN")
