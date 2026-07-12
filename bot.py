@@ -433,10 +433,8 @@ async def on_message(message):
             msg_p = f"📸 **Preuve reçue** pour la mission de <@{joueur_id}>. En attente de l'analyse finale de l'administration :"
             await envoyer_double_notification(message.guild, msg_p, f"📸 Preuve d'accomplissement déposée par <@{joueur_id}> dans {message.channel.mention}.", view=VueEvaluationMission(joueur_id))
 
-# --- COMMANDES SLASH CITOYENS ---
-
-@bot.tree.command(name="aide", description="Affiche le tableau de bord des quêtes de Madagascar.")
-async def aide(interaction: discord.Interaction):
+# --- LOGIQUE INTERNE PARTAGÉE POUR LE PANNEAU D'AIDE ---
+async def generer_panneau_aide(interaction: discord.Interaction):
     embed = discord.Embed(title="⚜️ TABLEAU DES ORDRES DE MADAGASCAR ⚜️", color=discord.Color.gold())
     citoyen_desc = (
         "⚔️ **SYSTÈME DE QUÊTES**\n"
@@ -461,6 +459,16 @@ async def aide(interaction: discord.Interaction):
         embed.add_field(name="👑 ADMINISTRATION", value=admin_desc, inline=False)
     await interaction.response.send_message(embed=embed, view=VueBoutonTicket())
 
+# --- COMMANDES SLASH CITOYENS ---
+
+@bot.tree.command(name="aide", description="Affiche le tableau de bord des quêtes de Madagascar.")
+async def aide(interaction: discord.Interaction):
+    await generer_panneau_aide(interaction)
+
+@bot.tree.command(name="help", description="Affiche le tableau de bord des quêtes de Madagascar (Version Anglaise/Alternative).")
+async def help_cmd(interaction: discord.Interaction):
+    await generer_panneau_aide(interaction)
+
 @bot.tree.command(name="tuto", description="Guide d'utilisation pour mener à bien tes décrets.")
 async def tuto(interaction: discord.Interaction):
     embed_tuto = discord.Embed(
@@ -470,7 +478,7 @@ async def tuto(interaction: discord.Interaction):
     )
     embed_tuto.add_field(
         name="🎫 Étape 1 : Ouvrir l'Ordre",
-        value="Rends-toi dans la catégorie **⚜️ == [ 𝕸𝖎𝖘𝖘𝖎𝖔𝖓𝖘 ] ==** et utilise `/aide` pour obtenir le bouton vert d'ouverture de ticket.",
+        value="Rends-toi dans la catégorie **⚜️ == [ 𝕸𝖎𝖘𝖘𝖎𝖔𝖓𝖘 ] ==** et utilise `/aide` ou `/help` pour obtenir le bouton vert d'ouverture de ticket.",
         inline=False
     )
     embed_tuto.add_field(
