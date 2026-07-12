@@ -4,6 +4,7 @@ from discord import app_commands
 import random
 import os
 import json
+import asyncio
 from threading import Thread
 from flask import Flask
 from datetime import datetime, timedelta
@@ -450,6 +451,7 @@ async def generer_panneau_aide(interaction: discord.Interaction):
         admin_desc = (
             "🚨 **HAUT COMMANDEMENT (ADMIN / INSTRUCTEUR)**\n"
             "`/tutoadm` ↳ Manuel de l'administration.\n"
+            "`/mission_expiration` ↳ Lancer l'alerte d'inactivité (1h).\n"
             "`/missionaccepter` ↳ Forcer le succès d'un joueur.\n"
             "`/missionrefuser` ↳ Forcer l'échec d'un joueur.\n"
             "`/missionpreuve` ↳ Exiger un screen.\n\n"
@@ -556,6 +558,44 @@ async def historique(interaction: discord.Interaction, joueur: discord.Member = 
 
 # --- COMMANDES SLASH STAFF (ADMINISTRATION & INSTRUCTEURS) ---
 
+@bot.tree.command(name="mission_expiration", description="Avertit et planifie la suppression du ticket d'ordre s'il reste inactif pendant 1 heure.")
+@app_commands.describe(joueur="Le citoyen propriétaire du ticket d'ordre")
+async def mission_expiration(interaction: discord.Interaction, joueur: discord.Member):
+    if not verifier_permissions_staff(interaction.user):
+        await interaction.response.send_message("❌ Tu n'as pas l'autorité nécessaire pour exécuter cette sentence.", ephemeral=True)
+        return
+    
+    if joueur.id in missions_actives:
+        await interaction.response.send_message("❌ Impossible de lancer l'expiration : une mission est déjà activement en cours pour ce joueur.", ephemeral=True)
+        return
+
+    # Message d'avertissement formel dans le salon actuel
+    expiration_time = int((datetime.now() + timedelta(hours=1)).timestamp())
+    msg_alerte = (
+        f"⚠️ {joueur.mention}, **attention : cet ordre de mission va être supprimé <t:{expiration_time}:R> (<t:{expiration_time}:t>)** car aucune mission n'a été sélectionnée.\n"
+        f" Veuillez choisir un décret avant la fin du décompte réglementaire."
+    )
+    
+    await interaction.response.send_message("🚨 Alerte d'inactivité lancée. Le salon expirera dans une heure si aucune action n'est entreprise.")
+    await interaction.channel.send(msg_alerte)
+    
+    # Enregistrement de l'ID du salon pour s'assurer qu'il ne supprime pas le mauvais endroit après 1 heure
+    target_channel_id = interaction.channel.id
+    
+    # Tâche asynchrone en arrière-plan (attente de 1 heure)
+    await asyncio.sleep(3600)
+    
+    # Vérification post-délai : On s'assure que le joueur n'a pas démarré de mission entre temps
+    if joueur.id not in missions_actives:
+        channel_to_del = bot.get_channel(target_channel_id)
+        if channel_to_del:
+            try:
+                await channel_to_del.delete(reason="Expiration de l'ordre de mission (1 heure d'inactivité)")
+                # Notification dans validation-mission
+                await envoyer_double_notification(interaction.guild, "", f"🗑️ Le ticket d'ordre de {joueur.mention} a été automatiquement supprimé pour inactivité.")
+            except Exception as e:
+                print(f"Erreur lors de la suppression automatique du salon expiré : {e}")
+
 @bot.tree.command(name="tutoadm", description="Manuel réglementaire pour l'administration des ordres.")
 async def tutoadm(interaction: discord.Interaction):
     if not verifier_permissions_staff(interaction.user):
@@ -573,7 +613,7 @@ async def tutoadm(interaction: discord.Interaction):
     )
     embed_tuto.add_field(
         name="🛠️ 2. Commandes d'Urgence Manuelles",
-        value="`/missionaccepter [joueur]` -> Clôture en Succès.\n`/missionrefuser [joueur]` -> Clôture en Échec.\n`/missionpreuve [joueur]` -> Réouvre le salon pour screen.",
+        value="`/missionaccepter [joueur]` -> Clôture en Succès.\n`/missionrefuser [joueur]` -> Clôture en Échec.\n`/missionpreuve [joueur]` -> Réouvre le salon pour screen.\n`/mission_expiration [joueur]` -> Menace d'archivage d'un ticket vide (1h).",
         inline=False
     )
     await interaction.response.send_message(embed=embed_tuto, ephemeral=True)
