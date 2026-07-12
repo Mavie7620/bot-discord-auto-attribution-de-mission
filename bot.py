@@ -166,6 +166,43 @@ async def action_demander_preuve(joueur_id, channel, guild):
         return True
     return False
 
+async def gerer_expiration_automatique(guild, channel_id, joueur_id):
+    """
+    1. Attend 1 heure de manière invisible.
+    2. Si aucune mission n'a débuté, envoie l'avertissement de fermeture finale d'une heure.
+    3. Supprime après la seconde heure.
+    """
+    # Première heure invisible
+    await asyncio.sleep(3600)
+    
+    if joueur_id not in missions_actives:
+        channel = bot.get_channel(channel_id)
+        if not channel: return
+        
+        # Calcul du timestamp pour l'heure supplémentaire
+        expiration_time = int((datetime.now() + timedelta(hours=1)).timestamp())
+        member = guild.get_member(joueur_id)
+        mention_joueur = member.mention if member else f"<@{joueur_id}>"
+        
+        msg_expiration_auto = (
+            f"⚠️ {mention_joueur}, **attention : aucune mission n'a été sélectionnée depuis 1 heure.**\n"
+            f"Cet ordre de mission sera définitivement supprimé et annulé **<t:{expiration_time}:R>** (<t:{expiration_time}:t>)."
+        )
+        try: await channel.send(msg_expiration_auto)
+        except: return
+
+        # Seconde heure d'attente visible via le timestamp
+        await asyncio.sleep(3600)
+        
+        if joueur_id not in missions_actives:
+            channel_final = bot.get_channel(channel_id)
+            if channel_final:
+                try:
+                    await channel_final.delete(reason="Expiration de l'ordre de mission (2 heures d'inactivité au total)")
+                    await envoyer_double_notification(guild, "", f"🗑️ Le ticket d'ordre de {mention_joueur} a été supprimé automatiquement pour inactivité (1h attente + 1h avertissement).")
+                except Exception as e:
+                    print(f"Erreur lors de la suppression : {e}")
+
 @tasks.loop(seconds=1)
 async def verifier_temps_missions():
     maintenant = datetime.now()
@@ -249,10 +286,6 @@ class VueBoutonTicket(discord.ui.View):
 
         nom_salon = f"🪖-ordre-{joueur.name}"
         ticket_channel = await guild.create_text_channel(name=nom_salon, overwrites=overwrites, category=interaction.channel.category)
-        
-        mention_ins = role_instructeur.mention if role_instructeur else "@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]"
-        msg_notif = f"⚔️ {mention_ins} — Un nouveau ticket d'ordre vient d'être initié par {joueur.mention} dans {ticket_channel.mention} !"
-        await envoyer_double_notification(guild, msg_notif, msg_notif)
 
         embed_ticket = discord.Embed(
             title="⚜️ CENTRE DE SÉLECTION DES DÉCRETS ⚜️",
@@ -260,6 +293,10 @@ class VueBoutonTicket(discord.ui.View):
             color=discord.Color.dark_red()
         )
         await ticket_channel.send(embed=embed_ticket, view=VueChoixDifficulte(joueur.id))
+        
+        # Lancement de la coroutine de surveillance (Invisible au début)
+        asyncio.create_task(gerer_expiration_automatique(guild, ticket_channel.id, joueur.id))
+        
         await interaction.followup.send(f"✅ Ton ticket a été créé ici : {ticket_channel.mention}", ephemeral=True)
 
 class VueChoixDifficulte(discord.ui.View):
@@ -434,7 +471,6 @@ async def on_message(message):
             msg_p = f"📸 **Preuve reçue** pour la mission de <@{joueur_id}>. En attente de l'analyse finale de l'administration :"
             await envoyer_double_notification(message.guild, msg_p, f"📸 Preuve d'accomplissement déposée par <@{joueur_id}> dans {message.channel.mention}.", view=VueEvaluationMission(joueur_id))
 
-# --- LOGIQUE INTERNE PARTAGÉE POUR LE PANNEAU D'AIDE ---
 async def generer_panneau_aide(interaction: discord.Interaction):
     embed = discord.Embed(title="⚜️ TABLEAU DES ORDRES DE MADAGASCAR ⚜️", color=discord.Color.gold())
     citoyen_desc = (
@@ -461,13 +497,11 @@ async def generer_panneau_aide(interaction: discord.Interaction):
         embed.add_field(name="👑 ADMINISTRATION", value=admin_desc, inline=False)
     await interaction.response.send_message(embed=embed, view=VueBoutonTicket())
 
-# --- COMMANDES SLASH CITOYENS ---
-
 @bot.tree.command(name="aide", description="Affiche le tableau de bord des quêtes de Madagascar.")
 async def aide(interaction: discord.Interaction):
     await generer_panneau_aide(interaction)
 
-@bot.tree.command(name="help", description="Affiche le tableau de bord des quêtes de Madagascar (Version Anglaise/Alternative).")
+@bot.tree.command(name="help", description="Affiche le tableau de bord des quêtes de Madagascar.")
 async def help_cmd(interaction: discord.Interaction):
     await generer_panneau_aide(interaction)
 
@@ -532,7 +566,7 @@ async def missionaccomplie(interaction: discord.Interaction):
         return
     await interaction.response.send_message("❌ Tu n'as aucune mission active en cours.", ephemeral=True)
 
-@bot.tree.command(name="historique", description="Affiche l'historique de vos décrets passés ou d'un autre joueur.")
+@bot.tree.command(name="historique", description="Affiche l'historique de vos décrets passés.")
 @app_commands.describe(joueur="Le joueur dont vous voulez voir le casier.")
 async def historique(interaction: discord.Interaction, joueur: discord.Member = None):
     cible = joueur or interaction.user
@@ -556,8 +590,6 @@ async def historique(interaction: discord.Interaction, joueur: discord.Member = 
         
     await interaction.response.send_message(embed=embed)
 
-# --- COMMANDES SLASH STAFF (ADMINISTRATION & INSTRUCTEURS) ---
-
 @bot.tree.command(name="mission_expiration", description="Avertit et planifie la suppression du ticket d'ordre s'il reste inactif pendant 1 heure.")
 @app_commands.describe(joueur="Le citoyen propriétaire du ticket d'ordre")
 async def mission_expiration(interaction: discord.Interaction, joueur: discord.Member):
@@ -569,7 +601,6 @@ async def mission_expiration(interaction: discord.Interaction, joueur: discord.M
         await interaction.response.send_message("❌ Impossible de lancer l'expiration : une mission est déjà activement en cours pour ce joueur.", ephemeral=True)
         return
 
-    # Message d'avertissement formel dans le salon actuel
     expiration_time = int((datetime.now() + timedelta(hours=1)).timestamp())
     msg_alerte = (
         f"⚠️ {joueur.mention}, **attention : cet ordre de mission va être supprimé <t:{expiration_time}:R> (<t:{expiration_time}:t>)** car aucune mission n'a été sélectionnée.\n"
@@ -579,19 +610,14 @@ async def mission_expiration(interaction: discord.Interaction, joueur: discord.M
     await interaction.response.send_message("🚨 Alerte d'inactivité lancée. Le salon expirera dans une heure si aucune action n'est entreprise.")
     await interaction.channel.send(msg_alerte)
     
-    # Enregistrement de l'ID du salon pour s'assurer qu'il ne supprime pas le mauvais endroit après 1 heure
     target_channel_id = interaction.channel.id
-    
-    # Tâche asynchrone en arrière-plan (attente de 1 heure)
     await asyncio.sleep(3600)
     
-    # Vérification post-délai : On s'assure que le joueur n'a pas démarré de mission entre temps
     if joueur.id not in missions_actives:
         channel_to_del = bot.get_channel(target_channel_id)
         if channel_to_del:
             try:
-                await channel_to_del.delete(reason="Expiration de l'ordre de mission (1 heure d'inactivité)")
-                # Notification dans validation-mission
+                await channel_to_del.delete(reason="Expiration de l'ordre de mission")
                 await envoyer_double_notification(interaction.guild, "", f"🗑️ Le ticket d'ordre de {joueur.mention} a été automatiquement supprimé pour inactivité.")
             except Exception as e:
                 print(f"Erreur lors de la suppression automatique du salon expiré : {e}")
