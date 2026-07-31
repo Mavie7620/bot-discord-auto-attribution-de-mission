@@ -151,6 +151,9 @@ async def action_refuser_mission(joueur_id, channel):
 
 async def action_demander_preuve(joueur_id, channel, guild):
     if joueur_id in missions_actives:
+        m_info = missions_actives[joueur_id]
+        m_info["en_attente"] = True  # Mettre en pause le chrono
+        
         member = guild.get_member(joueur_id)
         if member:
             await channel.set_permissions(member, read_messages=True, send_messages=True)
@@ -158,28 +161,22 @@ async def action_demander_preuve(joueur_id, channel, guild):
         role_instructeur = discord.utils.get(guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]")
         mention_ins = role_instructeur.mention if role_instructeur else "@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]"
         
-        msg_ticket = f"⚠️ <@{joueur_id}>, **{mention_ins} veuillez nous fournire une preuve de l'acomplissement de votre mission**"
-        msg_log_missions = f"📸 {mention_ins} — Une demande de preuve a été envoyée à <@{joueur_id}> dans son ticket {channel.mention}."
+        msg_ticket = f"⚠️ <@{joueur_id}>, **{mention_ins} veuillez nous fournir une preuve de l'accomplissement de votre mission.**"
+        msg_log_missions = f"📸 {mention_ins} — Une demande de preuve a été envoyée à <@{joueur_id}> dans son ticket {channel.mention}.\nMerci de valider ou refuser ci-dessous une fois la preuve examinée :"
         
         await channel.send(msg_ticket)
-        await envoyer_double_notification(guild, msg_ticket, msg_log_missions)
+        # Renvoie à nouveau les boutons d'évaluation (Accepter, Refuser, Preuve)
+        await envoyer_double_notification(guild, msg_ticket, msg_log_missions, view=VueEvaluationMission(joueur_id))
         return True
     return False
 
 async def gerer_expiration_automatique(guild, channel_id, joueur_id):
-    """
-    1. Attend 1 heure de manière invisible.
-    2. Si aucune mission n'a débuté, envoie l'avertissement de fermeture finale d'une heure.
-    3. Supprime après la seconde heure.
-    """
-    # Première heure invisible
     await asyncio.sleep(3600)
     
     if joueur_id not in missions_actives:
         channel = bot.get_channel(channel_id)
         if not channel: return
         
-        # Calcul du timestamp pour l'heure supplémentaire
         expiration_time = int((datetime.now() + timedelta(hours=1)).timestamp())
         member = guild.get_member(joueur_id)
         mention_joueur = member.mention if member else f"<@{joueur_id}>"
@@ -191,7 +188,6 @@ async def gerer_expiration_automatique(guild, channel_id, joueur_id):
         try: await channel.send(msg_expiration_auto)
         except: return
 
-        # Seconde heure d'attente visible via le timestamp
         await asyncio.sleep(3600)
         
         if joueur_id not in missions_actives:
@@ -294,9 +290,7 @@ class VueBoutonTicket(discord.ui.View):
         )
         await ticket_channel.send(embed=embed_ticket, view=VueChoixDifficulte(joueur.id))
         
-        # Lancement de la coroutine de surveillance (Invisible au début)
         asyncio.create_task(gerer_expiration_automatique(guild, ticket_channel.id, joueur.id))
-        
         await interaction.followup.send(f"✅ Ton ticket a été créé ici : {ticket_channel.mention}", ephemeral=True)
 
 class VueChoixDifficulte(discord.ui.View):
@@ -642,7 +636,7 @@ async def tutoadm(interaction: discord.Interaction):
         value="`/missionaccepter [joueur]` -> Clôture en Succès.\n`/missionrefuser [joueur]` -> Clôture en Échec.\n`/missionpreuve [joueur]` -> Réouvre le salon pour screen.\n`/mission_expiration [joueur]` -> Menace d'archivage d'un ticket vide (1h).",
         inline=False
     )
-    await interaction.response.send_message(embed=embed_tuto, ephemeral=True)
+    await interaction.response.send_message(embed_tuto, ephemeral=True)
 
 @bot.tree.command(name="missionaccepter", description="Valide et force manuellement le succès de la mission d'un joueur.")
 @app_commands.describe(joueur="Le citoyen à valider")
@@ -688,15 +682,40 @@ async def listemissions(interaction: discord.Interaction):
     if not verifier_permissions_staff(interaction.user):
         await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
         return
+
     global missions_dispo
     missions_dispo = charger_missions_fichier()
-    reponse = "⚜️ **ARCHIVES DES MISSIONS DISPONIBLES** ⚜️\n"
+    
+    # Construction de la liste complète des blocs de texte
+    lignes = ["⚜️ **ARCHIVES DES MISSIONS DISPONIBLES** ⚜️\n"]
+    
     for cat in ["commune", "moyenne", "difficile", "royal"]:
-        reponse += f"\n__**{cat.upper()} :**__\n"
-        if not missions_dispo[cat]: reponse += "*Aucune mission disponible*\n"
+        lignes.append(f"\n__**{cat.upper()} :**__\n")
+        if not missions_dispo[cat]:
+            lignes.append("*Aucune mission disponible*\n")
         else:
-            for i, m in enumerate(missions_dispo[cat], start=1): reponse += f"**{i}.** {m['texte']} *(Délai : {m['delai']})*\n"
-    await interaction.response.send_message(reponse[:2000], ephemeral=True)
+            for i, m in enumerate(missions_dispo[cat], start=1):
+                lignes.append(f"**{i}.** {m['texte']} *(Délai : {m['delai']})*\n")
+    
+    # Découpage en sous-messages de maximum 2000 caractères
+    messages = []
+    message_actuel = ""
+    for ligne in lignes:
+        if len(message_actuel) + len(ligne) > 1900:
+            messages.append(message_actuel)
+            message_actuel = ligne
+        else:
+            message_actuel += ligne
+            
+    if message_actuel:
+        messages.append(message_actuel)
+        
+    # Envoi du premier message via l'interaction
+    await interaction.response.send_message(messages[0], ephemeral=True)
+    
+    # Envoi des messages suivants si la liste dépasse 2000 caractères
+    for msg in messages[1:]:
+        await interaction.followup.send(msg, ephemeral=True)
 
 @bot.tree.command(name="addmission", description="Ajoute une nouvelle quête au catalogue global.")
 @app_commands.describe(categorie="commune, moyenne, difficile, royal", texte="Contenu de l'objectif", temps="Exemple: 2h, 3j, 45min")
