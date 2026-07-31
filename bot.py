@@ -9,16 +9,21 @@ from threading import Thread
 from flask import Flask
 from datetime import datetime, timedelta
 
+# --- SERVEUR WEB KEEP-ALIVE ---
 app = Flask('')
 
 @app.route('/')
-def home(): return "Le bot de Madagascar est vivant !"
+def home(): 
+    return "Le bot de Madagascar est vivant !"
 
-def run_web(): app.run(host='0.0.0.0', port=8080)
+def run_web(): 
+    app.run(host='0.0.0.0', port=8080)
+
 def keep_alive():
     t = Thread(target=run_web)
     t.start()
 
+# --- CONFIGURATION DISCORD ---
 intents = discord.Intents.default()
 intents.message_content = True
 intents.members = True
@@ -27,33 +32,44 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 FILE_NAME = "missions.txt"
 PROFILES_FILE = "profils.txt"
 
+# --- GESTION DU FICHIER DES MISSIONS ---
 def charger_missions_fichier():
     structure = {"commune": [], "moyenne": [], "difficile": [], "royal": []}
-    if not os.path.exists(FILE_NAME): return structure
+    if not os.path.exists(FILE_NAME): 
+        return structure
     with open(FILE_NAME, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
-            if not line or "|" not in line: continue
+            if not line or "|" not in line: 
+                continue
             cat, texte, delai = line.split("|", 2)
-            if cat in structure: structure[cat].append({"texte": texte, "delai": delai})
+            if cat in structure: 
+                structure[cat].append({"texte": texte, "delai": delai})
     return structure
 
 def réécrire_toutes_missions(structure):
     with open(FILE_NAME, "w", encoding="utf-8") as f:
         for cat, liste in structure.items():
-            for m in liste: f.write(f"{cat}|{m['texte']}|{m['delai']}\n")
+            for m in liste: 
+                f.write(f"{cat}|{m['texte']}|{m['delai']}\n")
 
 def sauvegarder_mission_fichier(categorie, texte, delai):
-    with open(FILE_NAME, "a", encoding="utf-8") as f: f.write(f"{categorie}|{texte}|{delai}\n")
+    with open(FILE_NAME, "a", encoding="utf-8") as f: 
+        f.write(f"{categorie}|{texte}|{delai}\n")
 
+# --- GESTION DES PROFILS ET DE L'HISTORIQUE ---
 def charger_profils():
-    if not os.path.exists(PROFILES_FILE): return {}
+    if not os.path.exists(PROFILES_FILE): 
+        return {}
     try:
-        with open(PROFILES_FILE, "r", encoding="utf-8") as f: return json.load(f)
-    except: return {}
+        with open(PROFILES_FILE, "r", encoding="utf-8") as f: 
+            return json.load(f)
+    except: 
+        return {}
 
 def sauvegarder_profils(profils):
-    with open(PROFILES_FILE, "w", encoding="utf-8") as f: json.dump(profils, f, indent=4, ensure_ascii=False)
+    with open(PROFILES_FILE, "w", encoding="utf-8") as f: 
+        json.dump(profils, f, indent=4, ensure_ascii=False)
 
 def initialiser_profil(p_id, profils):
     s_id = str(p_id)
@@ -73,12 +89,15 @@ def ajouter_historique(p_id, profils, texte, statut):
         "date": datetime.now().strftime("%d/%m/%Y à %H:%M")
     })
 
+# --- OUTILS DE TEMPS ---
 def extraire_duree(delai_texte):
     mots = delai_texte.lower().replace("pour dans", "").replace("pour", "").strip().split()
     valeur = 1
     for i, mot in enumerate(mots):
-        try: valeur = float(mots[i-1].replace(",", "."))
-        except (ValueError, IndexError): continue
+        try: 
+            valeur = float(mots[i-1].replace(",", "."))
+        except (ValueError, IndexError): 
+            continue
         if "min" in mot or "mn" in mot: return timedelta(minutes=valeur)
         if "heure" in mot or "hour" in mot or "h" in mot: return timedelta(hours=valeur)
         if "jour" in mot or "day" in mot or "j" in mot: return timedelta(days=valeur)
@@ -86,6 +105,7 @@ def extraire_duree(delai_texte):
         if "mois" in mot or "moi" in mot or "month" in mot: return timedelta(days=valeur * 30)
     return timedelta(days=3)
 
+# Variables globales
 missions_dispo = charger_missions_fichier()
 missions_actives = {}
 
@@ -104,8 +124,12 @@ def verifier_permissions_staff(user):
 async def envoyer_double_notification(guild, msg_ticket, msg_missions, view=None):
     salon_missions = discord.utils.get(guild.text_channels, name="validation-mission")
     if salon_missions and msg_missions:
-        try: await salon_missions.send(msg_missions, view=view)
-        except: pass
+        try: 
+            await salon_missions.send(msg_missions, view=view)
+        except: 
+            pass
+
+# --- VUES ET BOUTONS ---
 
 class VueFermerTicket(discord.ui.View):
     def __init__(self):
@@ -114,8 +138,10 @@ class VueFermerTicket(discord.ui.View):
     @discord.ui.button(label="🔒 Fermer le ticket", style=discord.ButtonStyle.danger, custom_id="btn_fermer_ticket")
     async def fermer_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message("⚙️ Suppression du salon en cours...", ephemeral=True)
-        try: await interaction.channel.delete()
-        except: pass
+        try: 
+            await interaction.channel.delete()
+        except: 
+            pass
 
 async def action_accepter_mission(joueur_id, channel):
     if joueur_id in missions_actives:
@@ -156,7 +182,6 @@ async def action_demander_preuve(joueur_id, channel, guild):
         
         member = guild.get_member(joueur_id)
         if member:
-            # Redonne l'accès d'écriture au joueur pour envoyer sa capture d'écran
             await channel.set_permissions(member, read_messages=True, send_messages=True)
             
         role_instructeur = discord.utils.get(guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]")
@@ -165,11 +190,12 @@ async def action_demander_preuve(joueur_id, channel, guild):
         msg_ticket = f"⚠️ <@{joueur_id}>, **{mention_ins} vous demande de fournir une preuve (capture d'écran) de l'accomplissement de votre mission dans ce salon.**"
         await channel.send(msg_ticket)
         
-        # Envoie un NOUVEAU message dans validation-mission avec la vue sans le bouton preuve
         msg_log_missions = f"📸 {mention_ins} — Demande de preuve envoyée à <@{joueur_id}> pour son ticket {channel.mention}.\n*Veuillez valider ou refuser une fois la preuve vérifiée :*"
         await envoyer_double_notification(guild, "", msg_log_missions, view=VueEvaluationApresPreuve(joueur_id))
         return True
     return False
+
+# --- TÂCHES AUTOMATIQUES ---
 
 async def gerer_expiration_automatique(guild, channel_id, joueur_id):
     await asyncio.sleep(3600)
@@ -195,8 +221,8 @@ async def gerer_expiration_automatique(guild, channel_id, joueur_id):
             channel_final = bot.get_channel(channel_id)
             if channel_final:
                 try:
-                    await channel_final.delete(reason="Expiration de l'ordre de mission (2 heures d'inactivité au total)")
-                    await envoyer_double_notification(guild, "", f"🗑️ Le ticket d'ordre de {mention_joueur} a été supprimé automatiquement pour inactivité (1h attente + 1h avertissement).")
+                    await channel_final.delete(reason="Expiration de l'ordre de mission")
+                    await envoyer_double_notification(guild, "", f"🗑️ Le ticket d'ordre de {mention_joueur} a été supprimé automatiquement pour inactivité.")
                 except Exception as e:
                     print(f"Erreur lors de la suppression : {e}")
 
@@ -249,6 +275,8 @@ async def verifier_temps_missions():
     for joueur_id in missions_a_retirer:
         if joueur_id in missions_actives: del missions_actives[joueur_id]
 
+# --- PANNEAU DE TICKETS ET CHOIX ---
+
 class VueBoutonTicket(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -278,7 +306,7 @@ class VueBoutonTicket(discord.ui.View):
         await interaction.response.send_message(f"✅ Votre ticket de mission a été créé : {salon_ticket.mention}", ephemeral=True)
         
         view = VueChoixMissions(joueur.id)
-        embed = discord.embeds.Embed(
+        embed = discord.Embed(
             title="📜 Demande d'Ordre de Mission",
             description=f"Bienvenue {joueur.mention}.\nChoisissez le type de mission que vous souhaitez accomplir ci-dessous :",
             color=discord.Color.gold()
@@ -365,8 +393,8 @@ class VueChoixMissions(discord.ui.View):
     @discord.ui.button(label="👑 Royal", style=discord.ButtonStyle.success, custom_id="btn_royal")
     async def btn_royal(self, i, b): await self.piocher_et_affecter(i, "royal", "Royal 👑")
 
+# --- VUES EVALUATION (ACCEPTATION / REFUS / PREUVES) ---
 
-# --- VUE STANDARD DE VALIDATION (AVEC BOUTON DE DEMANDE DE PREUVE) ---
 class VueEvaluationMission(discord.ui.View):
     def __init__(self, joueur_id):
         super().__init__(timeout=None)
@@ -386,7 +414,6 @@ class VueEvaluationMission(discord.ui.View):
         if channel:
             res = await action_accepter_mission(self.joueur_id, channel)
             if res:
-                button.disabled = True
                 self.stop()
                 await interaction.response.edit_message(content=f"{interaction.message.content}\n\n✅ **Mission ACCEPTEE par {interaction.user.mention}**", view=None)
 
@@ -424,8 +451,6 @@ class VueEvaluationMission(discord.ui.View):
                 self.stop()
                 await interaction.response.edit_message(content=f"{interaction.message.content}\n\n📸 **Demande de preuve envoyée par {interaction.user.mention}**", view=None)
 
-
-# --- NOUVELLE VUE : UTILISÉE APRÈS UNE DEMANDE DE PREUVE (PAS DE BOUTON PREUVE DEDANS) ---
 class VueEvaluationApresPreuve(discord.ui.View):
     def __init__(self, joueur_id):
         super().__init__(timeout=None)
@@ -465,12 +490,12 @@ class VueEvaluationApresPreuve(discord.ui.View):
                 self.stop()
                 await interaction.response.edit_message(content=f"{interaction.message.content}\n\n❌ **Mission REFUSÉE suite aux preuves par {interaction.user.mention}**", view=None)
 
+# --- ÉVÉNEMENT MESSAGE ---
 
 @bot.event
 async def on_message(message):
     if message.author.bot: return
 
-    # Si un joueur envoie un fichier/image dans son ticket alors qu'une preuve était demandée
     if message.author.id in missions_actives:
         m_info = missions_actives[message.author.id]
         if m_info.get("en_attente", False) and message.channel.id == m_info["channel_id"]:
@@ -480,7 +505,6 @@ async def on_message(message):
                 
                 await message.channel.send(f"📸 **Preuve déposée par {message.author.mention} !**\n{mention_ins}, une preuve a été postée. Merci de valider ou refuser la mission.")
                 
-                # Envoie un nouveau panneau avec les boutons d'acceptation/refus
                 msg_validation = (
                     f"📸 **Nouvelle preuve soumise par {message.author.mention} !**\n"
                     f"• **Ticket :** {message.channel.mention}\n"
@@ -490,7 +514,7 @@ async def on_message(message):
 
     await bot.process_commands(message)
 
-# --- COMMANDES D'ADMINISTRATION & PROFIL ---
+# --- COMMANDES SLASH SONT RÉINTÉGRÉES ICI ---
 
 @bot.tree.command(name="creer_panel", description="Crée le panneau permanent pour ouvrir les tickets de missions")
 async def creer_panel(interaction: discord.Interaction):
@@ -512,29 +536,35 @@ async def creer_panel(interaction: discord.Interaction):
     await interaction.response.send_message("✅ Panneau créé avec succès !", ephemeral=True)
 
 @bot.tree.command(name="add_mission", description="Ajouter une mission")
-async def add_mission(interaction: discord.Interaction, categorie: str, texte: str, delai: str):
+@app_commands.choices(categorie=[
+    app_commands.Choice(name="Commune", value="commune"),
+    app_commands.Choice(name="Moyenne", value="moyenne"),
+    app_commands.Choice(name="Difficile", value="difficile"),
+    app_commands.Choice(name="Royal", value="royal"),
+])
+async def add_mission(interaction: discord.Interaction, categorie: app_commands.Choice[str], texte: str, delai: str):
     if not verifier_permissions_staff(interaction.user):
         await interaction.response.send_message("❌ Seul un Instructeur ou Admin peut faire ça.", ephemeral=True)
         return
-    cat = categorie.lower().strip()
-    if cat not in missions_dispo:
-        await interaction.response.send_message("❌ Catégories valides : `commune`, `moyenne`, `difficile`, `royal`", ephemeral=True)
-        return
     
+    cat = categorie.value
     missions_dispo[cat].append({"texte": texte, "delai": delai})
     sauvegarder_mission_fichier(cat, texte, delai)
     await interaction.response.send_message(f"✅ Mission ajoutée dans **{cat}** :\n📜 *{texte}* (⏳ {delai})")
 
 @bot.tree.command(name="del_mission", description="Supprimer une mission grâce à son texte")
-async def del_mission(interaction: discord.Interaction, categorie: str, texte_exact: str):
+@app_commands.choices(categorie=[
+    app_commands.Choice(name="Commune", value="commune"),
+    app_commands.Choice(name="Moyenne", value="moyenne"),
+    app_commands.Choice(name="Difficile", value="difficile"),
+    app_commands.Choice(name="Royal", value="royal"),
+])
+async def del_mission(interaction: discord.Interaction, categorie: app_commands.Choice[str], texte_exact: str):
     if not verifier_permissions_staff(interaction.user):
         await interaction.response.send_message("❌ Seul un Instructeur ou Admin peut faire ça.", ephemeral=True)
         return
-    cat = categorie.lower().strip()
-    if cat not in missions_dispo:
-        await interaction.response.send_message("❌ Catégories valides : `commune`, `moyenne`, `difficile`, `royal`", ephemeral=True)
-        return
     
+    cat = categorie.value
     anciennes = missions_dispo[cat]
     nouvelles = [m for m in anciennes if m['texte'] != texte_exact]
     if len(anciennes) == len(nouvelles):
@@ -544,6 +574,22 @@ async def del_mission(interaction: discord.Interaction, categorie: str, texte_ex
     missions_dispo[cat] = nouvelles
     réécrire_toutes_missions(missions_dispo)
     await interaction.response.send_message(f"🗑️ Mission supprimée de la catégorie **{cat}**.")
+
+@bot.tree.command(name="list_missions", description="Lister toutes les missions disponibles enregistrées")
+async def list_missions(interaction: discord.Interaction):
+    if not verifier_permissions_staff(interaction.user):
+        await interaction.response.send_message("❌ Accès réservé au staff.", ephemeral=True)
+        return
+
+    embed = discord.Embed(title="📜 Liste globale des missions enregistrées", color=discord.Color.blue())
+    for cat, liste in missions_dispo.items():
+        val = ""
+        for idx, m in enumerate(liste, 1):
+            val += f"`{idx}.` {m['texte']} (*{m['delai']}*)\n"
+        if not val: val = "Aucune mission."
+        embed.add_field(name=f"Catégorie {cat.capitalize()}", value=val, inline=False)
+
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @bot.tree.command(name="profil", description="Voir les statistiques et l'historique d'un membre")
 async def profil(interaction: discord.Interaction, membre: discord.Member = None):
@@ -579,9 +625,10 @@ async def profil(interaction: discord.Interaction, membre: discord.Member = None
     
     await interaction.response.send_message(embed=embed)
 
+# --- DÉMARRAGE DU BOT ---
+
 @bot.event
 async def on_ready():
-    # Enregistrement universel des vues pour éviter le dysfonctionnement au redémarrage du bot
     bot.add_view(VueBoutonTicket())
     bot.add_view(VueEvaluationMission(None))
     bot.add_view(VueEvaluationApresPreuve(None))
