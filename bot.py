@@ -165,7 +165,6 @@ async def action_demander_preuve(joueur_id, channel, guild):
         msg_log_missions = f"📸 {mention_ins} — Une demande de preuve a été envoyée à <@{joueur_id}> dans son ticket {channel.mention}.\nMerci de valider ou refuser ci-dessous une fois la preuve examinée :"
         
         await channel.send(msg_ticket)
-        # Renvoie à nouveau les boutons d'évaluation (Accepter, Refuser, Preuve)
         await envoyer_double_notification(guild, msg_ticket, msg_log_missions, view=VueEvaluationMission(joueur_id))
         return True
     return False
@@ -444,6 +443,154 @@ class VueEvaluationMission(discord.ui.View):
         chan_cible = bot.get_channel(m_info["channel_id"]) if m_info else interaction.channel
         await action_demander_preuve(self.joueur_id, chan_cible, interaction.guild)
 
+# --- NOUVELLE COMMANDE TEXTUELLE !IMPORT ---
+
+@bot.command(name="import")
+async def importer_missions(ctx, mode: str = "texte"):
+    """
+    Utilise '!import tout' pour injecter directement toutes les missions officielles d'un coup,
+    ou '!import' pour coller dynamiquement ton bloc de texte personnalisé.
+    """
+    # Vérification optionnelle des permissions staff pour la commande !import
+    if not verifier_permissions_staff(ctx.author):
+        await ctx.send("❌ Permission refusée.")
+        return
+
+    global missions_dispo
+
+    # Option 1 : Injection directe de toutes les missions officielles
+    if mode.lower() == "tout":
+        missions_a_restaurer = [
+            # Commune
+            ("commune", "récolter 3 stacks de diamants", "3 jours"),
+            ("commune", "récolter 3 minerais obscur", "3 jours"),
+            ("commune", "récolter 2 fibres de bois millénaires", "3 jours"),
+            ("commune", "récolter un dc de blé", "3 jours"),
+            ("commune", "récolter 1 dc de buche de bois ( tout type )", "3 jours"),
+            ("commune", "faire 15 potions ( force 2, vitesse 1 ou vitesse 2 )", "3 jours"),
+            ("commune", "récolter un stack de pomme rouge", "3 jours"),
+            ("commune", "craft 3 stockage d'energie", "3 jours"),
+            ("commune", "craft 3 stack de steel compressé", "3 jours"),
+            ("commune", "récolter 32 minerais d'ashtone ( minerais se trouvant sur le plafond du nether )", "3 jours"),
+            
+            # Moyenne
+            ("moyenne", "crafter un paneau solaire de tier 1", "7 jours"),
+            ("moyenne", "récolter un stack de blocs de diamants", "7 jours"),
+            ("moyenne", "recolter un dc de mais", "7 jours"),
+            ("moyenne", "récolter 5 fibre de bois millénaires", "7 jours"),
+            ("moyenne", "récolter un dc de glowstone", "7 jours"),
+            ("moyenne", "récolter 7 minerais obscur", "7 jours"),
+            ("moyenne", "récolter un coffre de stack de laine", "7 jours"),
+            ("moyenne", "faire un dc de potion de soin jetable", "7 jours"),
+            ("moyenne", "récolter 5 stack de blocs d'or", "7 jours"),
+            ("moyenne", "faire un dc de potion au choix ( force 2, vitesse 1, vitesse 2 ou invisibilité )", "7 jours"),
+            ("moyenne", "récolter 2 tiber", "7 jours"),
+            ("moyenne", "craft un écotron", "7 jours"),
+            ("moyenne", "produire 32 lingot d'eco", "7 jours"),
+            ("moyenne", "récolter 3 zirconiums", "7 jours"),
+            ("moyenne", "craft 1 biogenerateur", "7 jours"),
+            ("moyenne", "Recruter un joueur", "7 jours"),
+            ("moyenne", "craft 10 bouteilles de gaz", "7 jours"),
+            ("moyenne", "craft un chargeur élétrique", "7 jours"),
+            ("moyenne", "craft 6 stockage d'energie amélioré", "7 jours"),
+            ("moyenne", "récolter un dc de tournesol", "7 jours"),
+            ("moyenne", "récolté 3 stack d'ashtone ( minerais se trouvant sur le plafond du nether )", "7 jours"),
+            
+            # Difficile
+            ("difficile", "crafter un paneau solaire de tier 2", "15 jours"),
+            ("difficile", "récolter 15 minerais obscur", "15 jours"),
+            ("difficile", "récolter 8 tiber", "15 jours"),
+            ("difficile", "craft 3 paneaux solaires T2", "15 jours"),
+            ("difficile", "craft une pelle electrique", "15 jours"),
+            ("difficile", "produire 7 stack d'éco", "15 jours"),
+            ("difficile", "récolter 12 fibre de bois millénaires", "15 jours"),
+            ("difficile", "récolter 10 zirconiums", "15 jours"),
+            ("difficile", "Craft 3 biogenerateurs", "15 jours"),
+            ("difficile", "recruter 3 joueurs", "15 jours"),
+            ("difficile", "craft 1 extracteur a gaz", "15 jours"),
+            ("difficile", "craft un tracteur", "15 jours"),
+            
+            # Royal
+            ("royal", "craft un pétrolier", "20 jours"),
+            ("royal", "craft un serveur", "20 jours"),
+            ("royal", "récolter 30 minerais obscur", "20 jours"),
+            ("royal", "récolter 30 fibre de bois millénaires", "20 jours"),
+            ("royal", "craft 10 paneaux solaires T2", "20 jours"),
+            ("royal", "récolter 25 zirconiums", "20 jours")
+        ]
+
+        for cat, texte, temps in missions_a_restaurer:
+            sauvegarder_mission_fichier(cat, texte, temps)
+        
+        missions_dispo = charger_missions_fichier()
+        await ctx.send(f"✅ **Succès !** Les {len(missions_a_restaurer)} missions officielles ont toutes été injectées d'un coup dans le fichier.")
+        return
+
+    # Option 2 : Importation interactive par collage de texte si tu tapes juste "!import"
+    await ctx.send("📥 **Envoie ou colle ton bloc de missions** (avec tes catégories et tes listes) dans les 60 secondes qui suivent :")
+
+    def check(m):
+        return m.author == ctx.author and m.channel == ctx.channel
+
+    try:
+        msg = await bot.wait_for('message', timeout=60.0, check=check)
+    except asyncio.TimeoutError:
+        await ctx.send("⏰ Temps écoulé. Commande annulée.")
+        return
+
+    lignes = msg.content.split('\n')
+    nb_ajoutees = 0
+    categorie_actuelle = "commune"
+
+    correspondance_categories = {
+        "commune": "commune",
+        "moyenne": "moyenne",
+        "difficile": "difficile",
+        "royal": "royal",
+        "décret royal": "royal",
+        "ordre majeur": "difficile"
+    }
+
+    delais = {
+        "commune": "3 jours",
+        "moyenne": "7 jours",
+        "difficile": "15 jours",
+        "royal": "20 jours"
+    }
+
+    for ligne in lignes:
+        ligne_propre = ligne.strip()
+        if not ligne_propre:
+            continue
+
+        ligne_lower = ligne_propre.lower()
+        found_cat = False
+        for key, val in correspondance_categories.items():
+            if key in ligne_lower:
+                categorie_actuelle = val
+                found_cat = True
+                break
+        if found_cat:
+            continue
+
+        texte_mission = ligne_propre
+        for prefixe in ["1.", "2.", "3.", "4.", "5.", "6.", "7.", "8.", "9.", "10.", "-", "•"]:
+            if texte_mission.startswith(prefixe):
+                texte_mission = texte_mission[len(prefixe):].strip()
+                break
+
+        if not texte_mission:
+            continue
+
+        temps = delais.get(categorie_actuelle, "7 jours")
+        sauvegarder_mission_fichier(categorie_actuelle, texte_mission, temps)
+        nb_ajoutees += 1
+
+    missions_dispo = charger_missions_fichier()
+    await ctx.send(f"✅ **Succès !** {nb_ajoutees} missions ont été importées dynamiquement depuis ton message.")
+
+# --- ÉVÉNEMENTS DU BOT ---
+
 @bot.event
 async def on_ready():
     if not verifier_temps_missions.is_running(): verifier_temps_missions.start()
@@ -457,6 +604,9 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
+    # Traitement des commandes textuelles préfixées par ! (comme !import)
+    await bot.process_commands(message)
+
     if message.author.bot: return
     if message.channel.name and "🪖-ordre-" in message.channel.name and message.attachments:
         joueur_id = message.author.id
@@ -686,7 +836,6 @@ async def listemissions(interaction: discord.Interaction):
     global missions_dispo
     missions_dispo = charger_missions_fichier()
     
-    # Construction de la liste complète des blocs de texte
     lignes = ["⚜️ **ARCHIVES DES MISSIONS DISPONIBLES** ⚜️\n"]
     
     for cat in ["commune", "moyenne", "difficile", "royal"]:
@@ -697,7 +846,6 @@ async def listemissions(interaction: discord.Interaction):
             for i, m in enumerate(missions_dispo[cat], start=1):
                 lignes.append(f"**{i}.** {m['texte']} *(Délai : {m['delai']})*\n")
     
-    # Découpage en sous-messages de maximum 2000 caractères
     messages = []
     message_actuel = ""
     for ligne in lignes:
@@ -710,10 +858,8 @@ async def listemissions(interaction: discord.Interaction):
     if message_actuel:
         messages.append(message_actuel)
         
-    # Envoi du premier message via l'interaction
     await interaction.response.send_message(messages[0], ephemeral=True)
     
-    # Envoi des messages suivants si la liste dépasse 2000 caractères
     for msg in messages[1:]:
         await interaction.followup.send(msg, ephemeral=True)
 
