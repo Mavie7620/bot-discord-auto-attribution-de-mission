@@ -118,11 +118,9 @@ def verifier_permissions_staff(user):
     return user.guild_permissions.administrator or "[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚𝔯 ]" in roles_noms or "Palais Royal" in roles_noms
 
 async def envoyer_log_proprietaire(bot_instance, texte_log):
-    """Envoie un message privé à MAVIE7620 si trouvé sur l'un des serveurs."""
     for guild in bot_instance.guilds:
         membre = discord.utils.get(guild.members, name=PROPRIETAIRE_LOGS_NOM)
         if not membre:
-            # Recherche alternative par nom d'utilisateur brut ou global name
             membre = discord.utils.get(guild.members, global_name=PROPRIETAIRE_LOGS_NOM)
         if membre:
             try:
@@ -204,7 +202,6 @@ async def action_demander_preuve(joueur_id, channel, guild):
 
 async def gerer_expiration_automatique(guild, channel_id, joueur_id):
     await asyncio.sleep(3600)
-    
     if joueur_id not in missions_actives:
         channel = bot.get_channel(channel_id)
         if not channel: return
@@ -221,7 +218,6 @@ async def gerer_expiration_automatique(guild, channel_id, joueur_id):
         except: return
 
         await asyncio.sleep(3600)
-        
         if joueur_id not in missions_actives:
             channel_final = bot.get_channel(channel_id)
             if channel_final:
@@ -347,7 +343,6 @@ class VueChoixDifficulte(discord.ui.View):
             return
 
         mission_choisie = random.choice(missions_dispo[cat])
-
         duree = extraire_duree(mission_choisie["delai"])
         date_fin = datetime.now() + duree
         timestamp_discord = int(date_fin.timestamp())
@@ -478,7 +473,7 @@ class VueEvaluationMission(discord.ui.View):
         await action_demander_preuve(self.joueur_id, chan_cible, interaction.guild)
 
 
-# --- COMMANDE TEXTUELLE !IMPORT ---
+# --- COMMANDE TEXTUELLE !IMPORT MIS À JOUR ---
 
 @bot.command(name="import")
 async def importer_missions(ctx, mode: str = "texte"):
@@ -551,7 +546,32 @@ async def importer_missions(ctx, mode: str = "texte"):
         await envoyer_log_proprietaire(bot, f"Importation totale sur le serveur {ctx.guild.name} ({len(missions_a_restaurer)} missions).")
         return
 
-    await ctx.send("📥 **Envoie ou colle ton bloc de missions** pour ce serveur dans les 60 secondes :")
+    # S'il y a un fichier joint, on le lit directement comme un format exporté (catégorie|texte|délai)
+    if ctx.message.attachments:
+        nb_ajoutees = 0
+        try:
+            attachement = ctx.message.attachments[0]
+            contenu_bytes = await attachement.read()
+            lignes = contenu_bytes.decode("utf-8").splitlines()
+            
+            for ligne in lignes:
+                ligne = ligne.strip()
+                if not ligne or "|" not in ligne: continue
+                parts = ligne.split("|", 2)
+                if len(parts) == 3:
+                    cat, texte, delai = parts[0].strip(), parts[1].strip(), parts[2].strip()
+                    if cat in ["commune", "moyenne", "difficile", "royal"]:
+                        sauvegarder_mission_fichier(guild_id, cat, texte, delai)
+                        nb_ajoutees += 1
+
+            await ctx.send(f"✅ **Succès !** {nb_ajoutees} missions ont été importées à partir du fichier `.txt` pour ce serveur.")
+            await envoyer_log_proprietaire(bot, f"Importation par fichier `.txt` sur {ctx.guild.name} ({nb_ajoutees} missions).")
+            return
+        except Exception as e:
+            await ctx.send(f"❌ Erreur lors de la lecture du fichier joint : {e}")
+            return
+
+    await ctx.send("📥 **Envoie ou colle ton bloc de missions** (ou glisse ton fichier `.txt` exporté) dans les 60 secondes :")
 
     def check(m):
         return m.author == ctx.author and m.channel == ctx.channel
@@ -562,6 +582,30 @@ async def importer_missions(ctx, mode: str = "texte"):
         await ctx.send("⏰ Temps écoulé. Commande annulée.")
         return
 
+    # Si l'utilisateur a envoyé un fichier directement lors du prompt d'attente
+    if msg.attachments:
+        nb_ajoutees = 0
+        try:
+            attachement = msg.attachments[0]
+            contenu_bytes = await attachement.read()
+            lignes = contenu_bytes.decode("utf-8").splitlines()
+            for ligne in lignes:
+                ligne = ligne.strip()
+                if not ligne or "|" not in ligne: continue
+                parts = ligne.split("|", 2)
+                if len(parts) == 3:
+                    cat, texte, delai = parts[0].strip(), parts[1].strip(), parts[2].strip()
+                    if cat in ["commune", "moyenne", "difficile", "royal"]:
+                        sauvegarder_mission_fichier(guild_id, cat, texte, delai)
+                        nb_ajoutees += 1
+            await ctx.send(f"✅ **Succès !** {nb_ajoutees} missions ont été importées depuis le fichier pour ce serveur.")
+            await envoyer_log_proprietaire(bot, f"Importation par fichier joint sur {ctx.guild.name} ({nb_ajoutees} missions).")
+            return
+        except Exception as e:
+            await ctx.send(f"❌ Erreur : {e}")
+            return
+
+    # Sinon, lecture en mode texte brut (copier-coller)
     lignes = msg.content.split('\n')
     nb_ajoutees = 0
     categorie_actuelle = "commune"
@@ -585,6 +629,16 @@ async def importer_missions(ctx, mode: str = "texte"):
     for ligne in lignes:
         ligne_propre = ligne.strip()
         if not ligne_propre: continue
+
+        # Support direct si le texte collé contient le format cat|texte|delai
+        if "|" in ligne_propre:
+            parts = ligne_propre.split("|", 2)
+            if len(parts) == 3:
+                cat, texte, delai = parts[0].strip(), parts[1].strip(), parts[2].strip()
+                if cat in ["commune", "moyenne", "difficile", "royal"]:
+                    sauvegarder_mission_fichier(guild_id, cat, texte, delai)
+                    nb_ajoutees += 1
+                    continue
 
         ligne_lower = ligne_propre.lower()
         found_cat = False
@@ -723,7 +777,7 @@ async def tuto(interaction: discord.Interaction):
     )
     embed_tuto.add_field(
         name="🎫 Étape 1 : Ouvrir l'Ordre",
-        value="Rends-toi dans la catégorie **⚜️ == [ 𝕸𝖎𝖘𝖘𝖎𝖔𝖓𝖘 ] ==** et utilise `/aide` ou `/help` pour obtenir le bouton vert d'ouverture de ticket.",
+        value="Rends-toi dans la catégorie **⚜️ == [ 𝕸𝖎s𝖘𝖎𝖔𝖓𝖘 ] ==** et utilise `/aide` ou `/help` pour obtenir le bouton vert d'ouverture de ticket.",
         inline=False
     )
     embed_tuto.add_field(
@@ -908,7 +962,6 @@ async def listemissions(interaction: discord.Interaction):
         return
 
     missions_dispo = charger_missions_fichier(interaction.guild.id)
-    
     lignes = ["⚜️ **ARCHIVES DES MISSIONS DISPONIBLES (SUR CE SERVEUR)** ⚜️\n"]
     
     for cat in ["commune", "moyenne", "difficile", "royal"]:
@@ -932,7 +985,6 @@ async def listemissions(interaction: discord.Interaction):
         messages.append(message_actuel)
         
     await interaction.response.send_message(messages[0], ephemeral=True)
-    
     for msg in messages[1:]:
         await interaction.followup.send(msg, ephemeral=True)
 
