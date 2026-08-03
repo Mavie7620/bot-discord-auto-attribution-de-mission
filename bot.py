@@ -25,7 +25,6 @@ intents.message_content = True
 intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Identifiant ou nom pour l'envoi des logs en MP
 PROPRIETAIRE_LOGS_NOM = "MAVIE7620"
 
 def get_file_name(guild_id):
@@ -33,6 +32,9 @@ def get_file_name(guild_id):
 
 def get_profiles_file(guild_id):
     return f"profils_{guild_id}.json"
+
+def get_active_missions_file(guild_id):
+    return f"missions_actives_{guild_id}.json"
 
 def charger_missions_fichier(guild_id):
     structure = {"commune": [], "moyenne": [], "difficile": [], "royal": []}
@@ -286,7 +288,7 @@ class VueBoutonTicket(discord.ui.View):
         guild = interaction.guild
         joueur = interaction.user
         
-        nom_categorie_requis = "⚜️ == [ 𝕸𝖎𝖘𝖘𝖎𝖔𝖓𝖘 ] =="
+        nom_categorie_requis = "⚜️ == [ 𝕸𝖎s𝖘𝖎𝖔𝖓𝖘 ] =="
         if not interaction.channel.category or interaction.channel.category.name != nom_categorie_requis:
             await interaction.response.send_message(f"❌ Les tickets s'ouvrent uniquement dans les salons de la catégorie **{nom_categorie_requis}** !", ephemeral=True)
             return
@@ -473,7 +475,7 @@ class VueEvaluationMission(discord.ui.View):
         await action_demander_preuve(self.joueur_id, chan_cible, interaction.guild)
 
 
-# --- COMMANDE TEXTUELLE !IMPORT MIS À JOUR ---
+# --- COMMANDE TEXTUELLE !IMPORT CATALOGUE ---
 
 @bot.command(name="import")
 async def importer_missions(ctx, mode: str = "texte"):
@@ -546,7 +548,6 @@ async def importer_missions(ctx, mode: str = "texte"):
         await envoyer_log_proprietaire(bot, f"Importation totale sur le serveur {ctx.guild.name} ({len(missions_a_restaurer)} missions).")
         return
 
-    # S'il y a un fichier joint, on le lit directement comme un format exporté (catégorie|texte|délai)
     if ctx.message.attachments:
         nb_ajoutees = 0
         try:
@@ -582,7 +583,6 @@ async def importer_missions(ctx, mode: str = "texte"):
         await ctx.send("⏰ Temps écoulé. Commande annulée.")
         return
 
-    # Si l'utilisateur a envoyé un fichier directement lors du prompt d'attente
     if msg.attachments:
         nb_ajoutees = 0
         try:
@@ -605,7 +605,6 @@ async def importer_missions(ctx, mode: str = "texte"):
             await ctx.send(f"❌ Erreur : {e}")
             return
 
-    # Sinon, lecture en mode texte brut (copier-coller)
     lignes = msg.content.split('\n')
     nb_ajoutees = 0
     categorie_actuelle = "commune"
@@ -630,7 +629,6 @@ async def importer_missions(ctx, mode: str = "texte"):
         ligne_propre = ligne.strip()
         if not ligne_propre: continue
 
-        # Support direct si le texte collé contient le format cat|texte|delai
         if "|" in ligne_propre:
             parts = ligne_propre.split("|", 2)
             if len(parts) == 3:
@@ -665,7 +663,7 @@ async def importer_missions(ctx, mode: str = "texte"):
     await envoyer_log_proprietaire(bot, f"Importation personnalisée sur {ctx.guild.name} ({nb_ajoutees} missions).")
 
 
-# --- COMMANDE TEXTUELLE !EXPORT ---
+# --- COMMANDE TEXTUELLE !EXPORT CATALOGUE ---
 
 @bot.command(name="export")
 async def exporter_missions(ctx):
@@ -696,7 +694,7 @@ async def exporter_missions(ctx):
         await ctx.send(f"❌ Erreur lors de l'export : {e}")
 
 
-# --- COMMANDE TEXTUELLE ET SLASH !DELALL / RESETMISSIONS ---
+# --- COMMANDE TEXTUELLE !DELALL ---
 
 @bot.command(name="delall")
 async def supprimer_toutes_missions_cmd(ctx):
@@ -736,7 +734,7 @@ async def on_message(message):
 async def generer_panneau_aide(interaction: discord.Interaction):
     embed = discord.Embed(title="⚜️ TABLEAU DES ORDRES DE MADAGASCAR ⚜️", color=discord.Color.gold())
     citoyen_desc = (
-        "⚔️ **SYSTÈME DE QUÊTES**\n"
+        "⚔️ **SYSTÈMÈ DE QUÊTES**\n"
         "Ouvre un ticket d'ordre privé dans la catégorie dédiée.\n\n"
         "`/missionaccomplie` ↳ Déclarer la fin de ta tâche active.\n"
         "`/missions_en_cours` ↳ Statut complet de ton contrat.\n"
@@ -749,10 +747,11 @@ async def generer_panneau_aide(interaction: discord.Interaction):
         admin_desc = (
             "🚨 **HAUT COMMANDEMENT (ADMIN / INSTRUCTEUR)**\n"
             "`/tutoadm` ↳ Manuel de l'administration.\n"
+            "`/fermerticket` ↳ Fermer un salon de ticket.\n"
+            "`/attribuer_mission` ↳ Assigner une mission auto à un joueur.\n"
+            "`/export_actives` | `/import_actives` ↳ Sauvegarder/Restaurer les missions en cours.\n"
             "`/mission_expiration` ↳ Lancer l'alerte d'inactivité (1h).\n"
-            "`/missionaccepter` ↳ Forcer le succès d'un joueur.\n"
-            "`/missionrefuser` ↳ Forcer l'échec d'un joueur.\n"
-            "`/missionpreuve` ↳ Exiger un screen.\n\n"
+            "`/missionaccepter` | `/missionrefuser` | `/missionpreuve`\n"
             "📂 **BASE DE DONNÉES**\n"
             "`/listemissions` | `/addmission` | `/delmission` | `/resetmissions`\n"
             "*(Commandes texte : `!export` / `!import` / `!delall`)*"
@@ -792,6 +791,158 @@ async def tuto(interaction: discord.Interaction):
     )
     embed_tuto.set_footer(text="Madagascar • Que la fortune te sourie")
     await interaction.response.send_message(embed=embed_tuto)
+
+
+# --- NOUVELLE COMMANDE : FERMER UN TICKET (ADMIN UNIQUEMENT) ---
+
+@bot.tree.command(name="fermerticket", description="Ferme et supprime immédiatement le salon du ticket actuel (Staff uniquement).")
+async def fermerticket(interaction: discord.Interaction):
+    if not verifier_permissions_staff(interaction.user):
+        await interaction.response.send_message("❌ Tu n'as pas l'autorité nécessaire pour fermer ce ticket.", ephemeral=True)
+        return
+    
+    await interaction.response.send_message("⚙️ Fermeture et suppression du salon du ticket par l'administration...", ephemeral=True)
+    try:
+        await interaction.channel.delete(reason=fLegends="Fermé par l'administrateur {interaction.user.name}")
+    except Exception as e:
+        print(f"Erreur lors de la suppression du salon de ticket : {e}")
+
+
+# --- NOUVELLE COMMANDE : ATTRIBUER UNE MISSION AUTOMATIQUEMENT ---
+
+@bot.tree.command(name="attribuer_mission", description="Attribue automatiquement et directement une mission aléatoire d'une catégorie à un joueur.")
+@app_commands.describe(joueur="Le citoyen destinataire", categorie="commune, moyenne, difficile, royal")
+async def attribuer_mission(interaction: discord.Interaction, joueur: discord.Member, categorie: str):
+    if not verifier_permissions_staff(interaction.user):
+        await interaction.response.send_message("❌ Tu n'as pas l'autorité nécessaire pour attribuer un décret.", ephemeral=True)
+        return
+
+    cat = categorie.lower().strip()
+    if cat in ["commune", "commun"]: cat = "commune"
+    elif cat in ["moyenne", "moyen"]: cat = "moyenne"
+    elif cat in ["difficile"]: cat = "difficile"
+    elif cat in ["royal", "royale"]: cat = "royal"
+    else:
+        await interaction.response.send_message("❌ Catégorie invalide. Choisis entre : commune, moyenne, difficile, royal.", ephemeral=True)
+        return
+
+    if joueur.id in missions_actives:
+        await interaction.response.send_message(f"❌ {joueur.mention} a déjà une mission active en cours !", ephemeral=True)
+        return
+
+    guild_id = interaction.guild.id
+    missions_dispo = charger_missions_fichier(guild_id)
+    if not missions_dispo[cat]:
+        await interaction.response.send_message(f"❌ Plus aucune mission disponible dans la catégorie `{cat.upper()}` sur ce serveur.", ephemeral=True)
+        return
+
+    mission_choisie = random.choice(missions_dispo[cat])
+    duree = extraire_duree(mission_choisie["delai"])
+    date_fin = datetime.now() + duree
+    timestamp_discord = int(date_fin.timestamp())
+
+    missions_actives[joueur.id] = {
+        "texte": mission_choisie["texte"], 
+        "delai_texte": mission_choisie["delai"],
+        "date_debut": datetime.now(), 
+        "date_fin": date_fin, 
+        "duree_totale": duree,
+        "cat": cat, 
+        "channel_id": interaction.channel.id, 
+        "alerte_moitie": False, 
+        "alerte_un_quart": False, 
+        "en_attente": False
+    }
+
+    embed_mission = discord.Embed(title="📜 DÉCRET IMPÉRIAL ATTRIBUÉ PAR L'ADMINISTRATION", color=discord.Color.gold())
+    embed_mission.add_field(name="🎯 Objectif", value=f"*{mission_choisie['texte']}*", inline=False)
+    embed_mission.add_field(name="📊 Difficulté", value=f"`{cat.upper()}`", inline=True)
+    embed_mission.add_field(name="⏳ Temps imparti", value=f"<t:{timestamp_discord}:R> (soit le <t:{timestamp_discord}:f>)", inline=False)
+    
+    await interaction.response.send_message(content=f"✅ Mission attribuée avec succès à {joueur.mention} dans ce salon !", embed=embed_mission, view=VueGestionJoueurMission(joueur.id))
+    await envoyer_log_proprietaire(bot, f"Attribution manuelle d'une mission {cat} à {joueur.name} sur {interaction.guild.name}.")
+
+
+# --- NOUVELLES COMMANDES : EXPORT ET IMPORT DES MISSIONS EN COURS ---
+
+@bot.tree.command(name="export_actives", description="Exporte et envoie un fichier .txt de toutes les missions actuellement en cours.")
+async def export_actives(interaction: discord.Interaction):
+    if not verifier_permissions_staff(interaction.user):
+        await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
+        return
+
+    guild_id = interaction.guild.id
+    # Filtrer les missions actives de ce serveur spécifique
+    actives_serveur = {}
+    for j_id, m_data in missions_actives.items():
+        # Vérifier si la mission appartient à un salon/guild de ce serveur
+        chan = bot.get_channel(m_data["channel_id"])
+        if chan and chan.guild.id == guild_id:
+            actives_serveur[str(j_id)] = {
+                "texte": m_data["texte"],
+                "delai_texte": m_data["delai_texte"],
+                "date_debut": m_data["date_debut"].isoformat(),
+                "date_fin": m_data["date_fin"].isoformat(),
+                "duree_totale_seconds": m_data["duree_totale"].total_seconds(),
+                "cat": m_data["cat"],
+                "channel_id": m_data["channel_id"],
+                "alerte_moitie": m_data["alerte_moitie"],
+                "alerte_un_quart": m_data["alerte_un_quart"],
+                "en_attente": m_data["en_attente"]
+            }
+
+    if not actives_serveur:
+        await interaction.response.send_message("⚠️ Aucune mission active en cours sur ce serveur à exporter.", ephemeral=True)
+        return
+
+    contenu_json = json.dumps(actives_serveur, indent=4, ensure_ascii=False)
+    buffer = io.BytesIO(contenu_json.encode("utf-8"))
+    buffer.seek(0)
+
+    nom_fichier = f"missions_actives_{guild_id}.txt"
+    fichier_discord = discord.File(buffer, filename=nom_fichier)
+    
+    await interaction.response.send_message("📤 **Voici le fichier de sauvegarde de toutes les missions en cours :**", file=fichier_discord, ephemeral=True)
+    await envoyer_log_proprietaire(bot, f"Export des missions en cours demandé sur {interaction.guild.name}.")
+
+@bot.tree.command(name="import_actives", description="Réinjecte les missions en cours à l'aide d'un fichier .txt attaché.")
+@app_commands.describe(fichier="Le fichier .txt contenant les missions en cours exportées")
+async def import_actives(interaction: discord.Interaction, fichier: discord.Attachment):
+    if not verifier_permissions_staff(interaction.user):
+        await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+    guild_id = interaction.guild.id
+
+    try:
+        contenu_bytes = await fichier.read()
+        donnees = json.loads(contenu_bytes.decode("utf-8"))
+        
+        nb_restaurees = 0
+        for str_j_id, m_data in donnees.items():
+            j_id = int(str_j_id)
+            missions_actives[j_id] = {
+                "texte": m_data["texte"],
+                "delai_texte": m_data["delai_texte"],
+                "date_debut": datetime.fromisoformat(m_data["date_debut"]),
+                "date_fin": datetime.fromisoformat(m_data["date_fin"]),
+                "duree_totale": timedelta(seconds=m_data["duree_totale_seconds"]),
+                "cat": m_data["cat"],
+                "channel_id": m_data["channel_id"],
+                "alerte_moitie": m_data["alerte_moitie"],
+                "alerte_un_quart": m_data["alerte_un_quart"],
+                "en_attente": m_data["en_attente"]
+            }
+            nb_restaurees += 1
+
+        await interaction.followup.send(f"✅ **Succès !** {nb_restaurees} missions en cours ont été réinjectées et restaurées avec succès.", ephemeral=True)
+        await envoyer_log_proprietaire(bot, f"Importation des missions en cours sur {interaction.guild.name} ({nb_restaurees} missions restaurées).")
+    except Exception as e:
+        await interaction.followup.send(f"❌ Erreur lors de la lecture ou de la réinjection du fichier : {e}", ephemeral=True)
+
+
+# --- COMMANDES EXISTANTES RESTANTES ---
 
 @bot.tree.command(name="missions_en_cours", description="Affiche le statut de votre mission active.")
 async def missions_en_cours(interaction: discord.Interaction):
@@ -902,7 +1053,7 @@ async def tutoadm(interaction: discord.Interaction):
     )
     embed_tuto.add_field(
         name="🛠️ 2. Commandes d'Urgence Manuelles",
-        value="`/missionaccepter [joueur]` -> Clôture en Succès.\n`/missionrefuser [joueur]` -> Clôture en Échec.\n`/missionpreuve [joueur]` -> Réouvre le salon pour screen.\n`/resetmissions` -> Supprimer TOUTES les missions de ce serveur.\n*(Commandes texte : `!export`, `!import`, `!delall`)*",
+        value="`/fermerticket` -> Fermer instantanément un salon de ticket.\n`/attribuer_mission` -> Assigner une mission auto.\n`/export_actives` & `/import_actives` -> Sauvegarder/Recharger les missions en cours.\n`/missionaccepter` -> Clôture en Succès.\n`/missionrefuser` -> Clôture en Échec.\n`/missionpreuve` -> Réouvre le salon pour screen.\n`/resetmissions` -> Supprimer TOUTES les missions de ce serveur.",
         inline=False
     )
     await interaction.response.send_message(embed_tuto, ephemeral=True)
