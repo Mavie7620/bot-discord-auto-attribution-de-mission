@@ -25,13 +25,20 @@ intents.message_content = True
 intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-FILE_NAME = "missions.txt"
-PROFILES_FILE = "profils.txt"
+# Identifiant ou nom pour l'envoi des logs en MP
+PROPRIETAIRE_LOGS_NOM = "MAVIE7620"
 
-def charger_missions_fichier():
+def get_file_name(guild_id):
+    return f"missions_{guild_id}.txt"
+
+def get_profiles_file(guild_id):
+    return f"profils_{guild_id}.json"
+
+def charger_missions_fichier(guild_id):
     structure = {"commune": [], "moyenne": [], "difficile": [], "royal": []}
-    if not os.path.exists(FILE_NAME): return structure
-    with open(FILE_NAME, "r", encoding="utf-8") as f:
+    file_name = get_file_name(guild_id)
+    if not os.path.exists(file_name): return structure
+    with open(file_name, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if not line or "|" not in line: continue
@@ -39,22 +46,31 @@ def charger_missions_fichier():
             if cat in structure: structure[cat].append({"texte": texte, "delai": delai})
     return structure
 
-def réécrire_toutes_missions(structure):
-    with open(FILE_NAME, "w", encoding="utf-8") as f:
+def réécrire_toutes_missions(guild_id, structure):
+    file_name = get_file_name(guild_id)
+    with open(file_name, "w", encoding="utf-8") as f:
         for cat, liste in structure.items():
             for m in liste: f.write(f"{cat}|{m['texte']}|{m['delai']}\n")
 
-def sauvegarder_mission_fichier(categorie, texte, delai):
-    with open(FILE_NAME, "a", encoding="utf-8") as f: f.write(f"{categorie}|{texte}|{delai}\n")
+def sauvegarder_mission_fichier(guild_id, categorie, texte, delai):
+    file_name = get_file_name(guild_id)
+    with open(file_name, "a", encoding="utf-8") as f: f.write(f"{categorie}|{texte}|{delai}\n")
 
-def charger_profils():
-    if not os.path.exists(PROFILES_FILE): return {}
+def vider_toutes_missions(guild_id):
+    file_name = get_file_name(guild_id)
+    with open(file_name, "w", encoding="utf-8") as f:
+        f.write("")
+
+def charger_profils(guild_id):
+    profiles_file = get_profiles_file(guild_id)
+    if not os.path.exists(profiles_file): return {}
     try:
-        with open(PROFILES_FILE, "r", encoding="utf-8") as f: return json.load(f)
+        with open(profiles_file, "r", encoding="utf-8") as f: return json.load(f)
     except: return {}
 
-def sauvegarder_profils(profils):
-    with open(PROFILES_FILE, "w", encoding="utf-8") as f: json.dump(profils, f, indent=4, ensure_ascii=False)
+def sauvegarder_profils(guild_id, profils):
+    profiles_file = get_profiles_file(guild_id)
+    with open(profiles_file, "w", encoding="utf-8") as f: json.dump(profils, f, indent=4, ensure_ascii=False)
 
 def initialiser_profil(p_id, profils):
     s_id = str(p_id)
@@ -87,7 +103,6 @@ def extraire_duree(delai_texte):
         if "mois" in mot or "moi" in mot or "month" in mot: return timedelta(days=valeur * 30)
     return timedelta(days=3)
 
-missions_dispo = charger_missions_fichier()
 missions_actives = {}
 
 TEXTE_ECHEC = (
@@ -100,13 +115,28 @@ TEXTE_ECHEC = (
 
 def verifier_permissions_staff(user):
     roles_noms = [r.name for r in user.roles]
-    return user.guild_permissions.administrator or "[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]" in roles_noms or "Palais Royal" in roles_noms
+    return user.guild_permissions.administrator or "[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚𝔯 ]" in roles_noms or "Palais Royal" in roles_noms
+
+async def envoyer_log_proprietaire(bot_instance, texte_log):
+    """Envoie un message privé à MAVIE7620 si trouvé sur l'un des serveurs."""
+    for guild in bot_instance.guilds:
+        membre = discord.utils.get(guild.members, name=PROPRIETAIRE_LOGS_NOM)
+        if not membre:
+            # Recherche alternative par nom d'utilisateur brut ou global name
+            membre = discord.utils.get(guild.members, global_name=PROPRIETAIRE_LOGS_NOM)
+        if membre:
+            try:
+                await membre.send(f"📋 **[LOG MADAGASCAR]** : {texte_log}")
+                return
+            except:
+                pass
 
 async def envoyer_double_notification(guild, msg_ticket, msg_missions, view=None):
     salon_missions = discord.utils.get(guild.text_channels, name="validation-mission")
     if salon_missions:
         try: await salon_missions.send(msg_missions, view=view)
         except: pass
+    await envoyer_log_proprietaire(guild._state._get_client(), f"[{guild.name}] {msg_missions}")
 
 class VueFermerTicket(discord.ui.View):
     def __init__(self):
@@ -119,34 +149,36 @@ class VueFermerTicket(discord.ui.View):
         except: pass
 
 async def action_accepter_mission(joueur_id, channel):
+    guild = channel.guild
     if joueur_id in missions_actives:
         m_info = missions_actives[joueur_id]
-        profils = charger_profils()
+        profils = charger_profils(guild.id)
         initialiser_profil(joueur_id, profils)
         profils[str(joueur_id)]["total_reussies"] += 1
         ajouter_historique(joueur_id, profils, m_info["texte"], "Succès")
-        sauvegarder_profils(profils)
+        sauvegarder_profils(guild.id, profils)
         del missions_actives[joueur_id]
         
         msg = "✅ **Mission Validée** ! L'objectif est consigné comme réussi dans le grand registre."
         await channel.send(msg, view=VueFermerTicket())
-        await envoyer_double_notification(channel.guild, msg, f"✅ **Mission accomplie** par <@{joueur_id}> : *\"{m_info['texte']}\"*")
+        await envoyer_double_notification(guild, msg, f"✅ **Mission accomplie** par <@{joueur_id}> : *\"{m_info['texte']}\"*")
         return True
     return False
 
 async def action_refuser_mission(joueur_id, channel):
+    guild = channel.guild
     if joueur_id in missions_actives:
         m_info = missions_actives[joueur_id]
-        profils = charger_profils()
+        profils = charger_profils(guild.id)
         initialiser_profil(joueur_id, profils)
         profils[str(joueur_id)]["total_echouees"] += 1
         ajouter_historique(joueur_id, profils, m_info["texte"], "Échec")
-        sauvegarder_profils(profils)
+        sauvegarder_profils(guild.id, profils)
         del missions_actives[joueur_id]
         
         msg = f"↩️ **Mission Terminée (Refusé/Échec)**.\n\n{TEXTE_ECHEC}"
         await channel.send(msg, view=VueFermerTicket())
-        await envoyer_double_notification(channel.guild, msg, f"❌ **Mission échouée/refusée** pour <@{joueur_id}> : *\"{m_info['texte']}\"*")
+        await envoyer_double_notification(guild, msg, f"❌ **Mission échouée/refusée** pour <@{joueur_id}> : *\"{m_info['texte']}\"*")
         return True
     return False
 
@@ -159,8 +191,8 @@ async def action_demander_preuve(joueur_id, channel, guild):
         if member:
             await channel.set_permissions(member, read_messages=True, send_messages=True)
             
-        role_instructeur = discord.utils.get(guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]")
-        mention_ins = role_instructeur.mention if role_instructeur else "@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]"
+        role_instructeur = discord.utils.get(guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚𝔯 ]")
+        mention_ins = role_instructeur.mention if role_instructeur else "@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚𝔯 ]"
         
         msg_ticket = f"⚠️ <@{joueur_id}>, **{mention_ins} veuillez nous fournir une preuve de l'accomplissement de votre mission.**"
         msg_log_missions = f"📸 {mention_ins} — Une demande de preuve a été envoyée à <@{joueur_id}> dans son ticket {channel.mention}.\nMerci de valider ou refuser ci-dessous une fois la preuve examinée :"
@@ -210,6 +242,7 @@ async def verifier_temps_missions():
         channel = bot.get_channel(m_info["channel_id"])
         if not channel: continue
         
+        guild = channel.guild
         duree_totale = m_info["duree_totale"]
         date_debut = m_info["date_debut"]
         date_fin = m_info["date_fin"]
@@ -218,21 +251,21 @@ async def verifier_temps_missions():
 
         if maintenant > date_fin:
             missions_a_retirer.append(joueur_id)
-            profils = charger_profils()
+            profils = charger_profils(guild.id)
             initialiser_profil(joueur_id, profils)
             profils[str(joueur_id)]["total_echouees"] += 1
             ajouter_historique(joueur_id, profils, m_info["texte"], "Échec")
-            sauvegarder_profils(profils)
+            sauvegarder_profils(guild.id, profils)
 
-            role_instructeur = discord.utils.get(channel.guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]")
-            mention_ins = role_instructeur.mention if role_instructeur else '@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]'
+            role_instructeur = discord.utils.get(guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚𝔯 ]")
+            mention_ins = role_instructeur.mention if role_instructeur else '@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚𝔯 ]'
             
             msg_echec = (
                 f"🚨 **MISSION ÉCHOUÉE** 🚨\nLe temps imparti est écoulé ! La mission de <@{joueur_id}> a échoué.\n"
                 f"📢 {mention_ins}, un citoyen a failli à son devoir.\n\n{TEXTE_ECHEC}"
             )
             await channel.send(msg_echec, view=VueFermerTicket())
-            await envoyer_double_notification(channel.guild, msg_echec, f"🚨 <@{joueur_id}> a dépassé le temps imparti pour sa mission : *\"{m_info['texte']}\"* !")
+            await envoyer_double_notification(guild, msg_echec, f"🚨 <@{joueur_id}> a dépassé le temps imparti pour sa mission : *\"{m_info['texte']}\"* !")
             
         elif temps_restant <= (duree_totale / 4) and not m_info["alerte_un_quart"]:
             m_info["alerte_un_quart"] = True
@@ -268,7 +301,7 @@ class VueBoutonTicket(discord.ui.View):
 
         await interaction.response.defer(ephemeral=True)
 
-        role_instructeur = discord.utils.get(guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]")
+        role_instructeur = discord.utils.get(guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚𝔯 ]")
         role_palais = discord.utils.get(guild.roles, name="Palais Royal")
 
         overwrites = {
@@ -307,10 +340,10 @@ class VueChoixDifficulte(discord.ui.View):
             await interaction.response.send_message("Vous ne pouvez obtenir qu'une seule mission a la fois !", ephemeral=True)
             return
 
-        global missions_dispo
-        missions_dispo = charger_missions_fichier()
+        guild_id = interaction.guild.id
+        missions_dispo = charger_missions_fichier(guild_id)
         if not missions_dispo[cat]:
-            await interaction.response.send_message(f"❌ Plus de mission disponible dans la catégorie `{cat.upper()}`.", ephemeral=True)
+            await interaction.response.send_message(f"❌ Plus de mission disponible dans la catégorie `{cat.upper()}` sur ce serveur.", ephemeral=True)
             return
 
         mission_choisie = random.choice(missions_dispo[cat])
@@ -374,8 +407,8 @@ class VueGestionJoueurMission(discord.ui.View):
         for child in self.children: child.disabled = True
         await interaction.response.edit_message(view=self)
 
-        role_instructeur = discord.utils.get(interaction.guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]")
-        mention_ins = role_instructeur.mention if role_instructeur else '@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]'
+        role_instructeur = discord.utils.get(interaction.guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚𝔯 ]")
+        mention_ins = role_instructeur.mention if role_instructeur else '@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚𝔯 ]'
 
         await interaction.channel.set_permissions(interaction.user, read_messages=True, send_messages=False)
         await interaction.channel.send(f"💬 {interaction.user.mention}, un instructeur a été notifié. Votre demande va être traitée dans les plus brefs délais.")
@@ -445,7 +478,7 @@ class VueEvaluationMission(discord.ui.View):
         await action_demander_preuve(self.joueur_id, chan_cible, interaction.guild)
 
 
-# --- COMMANDE TEXTUELLE !IMPORT (Existante) ---
+# --- COMMANDE TEXTUELLE !IMPORT ---
 
 @bot.command(name="import")
 async def importer_missions(ctx, mode: str = "texte"):
@@ -453,7 +486,7 @@ async def importer_missions(ctx, mode: str = "texte"):
         await ctx.send("❌ Permission refusée.")
         return
 
-    global missions_dispo
+    guild_id = ctx.guild.id
 
     if mode.lower() == "tout":
         missions_a_restaurer = [
@@ -512,13 +545,13 @@ async def importer_missions(ctx, mode: str = "texte"):
         ]
 
         for cat, texte, temps in missions_a_restaurer:
-            sauvegarder_mission_fichier(cat, texte, temps)
+            sauvegarder_mission_fichier(guild_id, cat, texte, temps)
         
-        missions_dispo = charger_missions_fichier()
-        await ctx.send(f"✅ **Succès !** Les {len(missions_a_restaurer)} missions officielles ont toutes été injectées d'un coup dans le fichier.")
+        await ctx.send(f"✅ **Succès !** Les {len(missions_a_restaurer)} missions officielles ont toutes été injectées pour ce serveur.")
+        await envoyer_log_proprietaire(bot, f"Importation totale sur le serveur {ctx.guild.name} ({len(missions_a_restaurer)} missions).")
         return
 
-    await ctx.send("📥 **Envoie ou colle ton bloc de missions** (avec tes catégories et tes listes) dans les 60 secondes qui suivent :")
+    await ctx.send("📥 **Envoie ou colle ton bloc de missions** pour ce serveur dans les 60 secondes :")
 
     def check(m):
         return m.author == ctx.author and m.channel == ctx.channel
@@ -551,8 +584,7 @@ async def importer_missions(ctx, mode: str = "texte"):
 
     for ligne in lignes:
         ligne_propre = ligne.strip()
-        if not ligne_propre:
-            continue
+        if not ligne_propre: continue
 
         ligne_lower = ligne_propre.lower()
         found_cat = False
@@ -561,8 +593,7 @@ async def importer_missions(ctx, mode: str = "texte"):
                 categorie_actuelle = val
                 found_cat = True
                 break
-        if found_cat:
-            continue
+        if found_cat: continue
 
         texte_mission = ligne_propre
         for prefixe in ["1.", "2.", "3.", "4.", "5.", "6.", "7.", "8.", "9.", "10.", "-", "•"]:
@@ -570,50 +601,57 @@ async def importer_missions(ctx, mode: str = "texte"):
                 texte_mission = texte_mission[len(prefixe):].strip()
                 break
 
-        if not texte_mission:
-            continue
+        if not texte_mission: continue
 
         temps = delais.get(categorie_actuelle, "7 jours")
-        sauvegarder_mission_fichier(categorie_actuelle, texte_mission, temps)
+        sauvegarder_mission_fichier(guild_id, categorie_actuelle, texte_mission, temps)
         nb_ajoutees += 1
 
-    missions_dispo = charger_missions_fichier()
-    await ctx.send(f"✅ **Succès !** {nb_ajoutees} missions ont été importées dynamiquement depuis ton message.")
+    await ctx.send(f"✅ **Succès !** {nb_ajoutees} missions ont été importées dynamiquement pour ce serveur.")
+    await envoyer_log_proprietaire(bot, f"Importation personnalisée sur {ctx.guild.name} ({nb_ajoutees} missions).")
 
 
-# --- NOUVELLE COMMANDE TEXTUELLE !EXPORT ---
+# --- COMMANDE TEXTUELLE !EXPORT ---
 
 @bot.command(name="export")
 async def exporter_missions(ctx):
-    """
-    Génère et envoie un fichier texte contenant toutes les missions actuelles,
-    prêt à être réutilisé avec la commande !import.
-    """
     if not verifier_permissions_staff(ctx.author):
         await ctx.send("❌ Permission refusée.")
         return
 
-    if not os.path.exists(FILE_NAME):
-        await ctx.send("❌ Aucun fichier de missions (`missions.txt`) trouvé.")
+    file_name = get_file_name(ctx.guild.id)
+    if not os.path.exists(file_name):
+        await ctx.send("❌ Aucun fichier de missions trouvé pour ce serveur.")
         return
 
     try:
-        with open(FILE_NAME, "r", encoding="utf-8") as f:
+        with open(file_name, "r", encoding="utf-8") as f:
             contenu = f.read()
 
         if not contenu.strip():
-            await ctx.send("⚠️ Le fichier de missions est actuellement vide.")
+            await ctx.send("⚠️ Le fichier de missions de ce serveur est vide.")
             return
 
-        # Création d'un fichier virtuel en mémoire à envoyer sur Discord
         buffer = io.BytesIO(contenu.encode("utf-8"))
         buffer.seek(0)
         
-        fichier_discord = discord.File(buffer, filename="missions.txt")
-        await ctx.send("📤 **Voici l'export complet de tes missions actuelles :**\n*Tu peux le sauvegarder ou le réinjecter ultérieurement.*", file=fichier_discord)
-
+        fichier_discord = discord.File(buffer, filename=file_name)
+        await ctx.send("📤 **Voici l'export complet des missions de ce serveur :**", file=fichier_discord)
+        await envoyer_log_proprietaire(bot, f"Export des missions demandé sur le serveur {ctx.guild.name}.")
     except Exception as e:
-        await ctx.send(f"❌ Une erreur est survenue lors de l'export : {e}")
+        await ctx.send(f"❌ Erreur lors de l'export : {e}")
+
+
+# --- COMMANDE TEXTUELLE ET SLASH !DELALL / RESETMISSIONS ---
+
+@bot.command(name="delall")
+async def supprimer_toutes_missions_cmd(ctx):
+    if not verifier_permissions_staff(ctx.author):
+        await ctx.send("❌ Permission refusée.")
+        return
+    vider_toutes_missions(ctx.guild.id)
+    await ctx.send("🗑️ **Toutes les missions de ce serveur ont été supprimées avec succès !**")
+    await envoyer_log_proprietaire(bot, f"Suppression totale de toutes les missions sur le serveur {ctx.guild.name}.")
 
 
 # --- ÉVÉNEMENTS DU BOT ---
@@ -662,8 +700,8 @@ async def generer_panneau_aide(interaction: discord.Interaction):
             "`/missionrefuser` ↳ Forcer l'échec d'un joueur.\n"
             "`/missionpreuve` ↳ Exiger un screen.\n\n"
             "📂 **BASE DE DONNÉES**\n"
-            "`/listemissions` | `/addmission` | `/delmission`\n"
-            "*(Commandes texte : `!export` / `!import`)*"
+            "`/listemissions` | `/addmission` | `/delmission` | `/resetmissions`\n"
+            "*(Commandes texte : `!export` / `!import` / `!delall`)*"
         )
         embed.add_field(name="👑 ADMINISTRATION", value=admin_desc, inline=False)
     await interaction.response.send_message(embed=embed, view=VueBoutonTicket())
@@ -717,8 +755,8 @@ async def missions_en_cours(interaction: discord.Interaction):
 @bot.tree.command(name="missionaccomplie", description="Déclare l'objectif en cours comme accompli.")
 async def missionaccomplie(interaction: discord.Interaction):
     joueur = interaction.user
-    role_instructeur = discord.utils.get(interaction.guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]")
-    mention_ins = role_instructeur.mention if role_instructeur else '@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝔱𝔢𝔲𝔯 ]'
+    role_instructeur = discord.utils.get(interaction.guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚𝔯 ]")
+    mention_ins = role_instructeur.mention if role_instructeur else '@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚𝔯 ]'
     
     if joueur.id in missions_actives:
         m_info = missions_actives[joueur.id]
@@ -741,7 +779,7 @@ async def missionaccomplie(interaction: discord.Interaction):
 @app_commands.describe(joueur="Le joueur dont vous voulez voir le casier.")
 async def historique(interaction: discord.Interaction, joueur: discord.Member = None):
     cible = joueur or interaction.user
-    profils = charger_profils()
+    profils = charger_profils(interaction.guild.id)
     initialiser_profil(cible.id, profils)
     
     userData = profils[str(cible.id)]
@@ -810,7 +848,7 @@ async def tutoadm(interaction: discord.Interaction):
     )
     embed_tuto.add_field(
         name="🛠️ 2. Commandes d'Urgence Manuelles",
-        value="`/missionaccepter [joueur]` -> Clôture en Succès.\n`/missionrefuser [joueur]` -> Clôture en Échec.\n`/missionpreuve [joueur]` -> Réouvre le salon pour screen.\n`/mission_expiration [joueur]` -> Menace d'archivage d'un ticket vide (1h).\n*(Commandes texte : `!export` pour récupérer le txt des missions, `!import` pour les charger)*",
+        value="`/missionaccepter [joueur]` -> Clôture en Succès.\n`/missionrefuser [joueur]` -> Clôture en Échec.\n`/missionpreuve [joueur]` -> Réouvre le salon pour screen.\n`/resetmissions` -> Supprimer TOUTES les missions de ce serveur.\n*(Commandes texte : `!export`, `!import`, `!delall`)*",
         inline=False
     )
     await interaction.response.send_message(embed_tuto, ephemeral=True)
@@ -854,16 +892,24 @@ async def missionpreuve(interaction: discord.Interaction, joueur: discord.Member
     else:
         await interaction.followup.send("❌ Ce joueur n'a aucune mission active.")
 
+@bot.tree.command(name="resetmissions", description="Supprime et vide définitivement toutes les missions de ce serveur.")
+async def resetmissions(interaction: discord.Interaction):
+    if not verifier_permissions_staff(interaction.user):
+        await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
+        return
+    vider_toutes_missions(interaction.guild.id)
+    await interaction.response.send_message("🗑️ **Toutes les missions de ce serveur ont été effacées avec succès !**", ephemeral=True)
+    await envoyer_log_proprietaire(bot, f"Suppression totale via slash command sur le serveur {interaction.guild.name}.")
+
 @bot.tree.command(name="listemissions", description="Affiche l'index complet du catalogue des décrets.")
 async def listemissions(interaction: discord.Interaction):
     if not verifier_permissions_staff(interaction.user):
         await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
         return
 
-    global missions_dispo
-    missions_dispo = charger_missions_fichier()
+    missions_dispo = charger_missions_fichier(interaction.guild.id)
     
-    lignes = ["⚜️ **ARCHIVES DES MISSIONS DISPONIBLES** ⚜️\n"]
+    lignes = ["⚜️ **ARCHIVES DES MISSIONS DISPONIBLES (SUR CE SERVEUR)** ⚜️\n"]
     
     for cat in ["commune", "moyenne", "difficile", "royal"]:
         lignes.append(f"\n__**{cat.upper()} :**__\n")
@@ -890,7 +936,7 @@ async def listemissions(interaction: discord.Interaction):
     for msg in messages[1:]:
         await interaction.followup.send(msg, ephemeral=True)
 
-@bot.tree.command(name="addmission", description="Ajoute une nouvelle quête au catalogue global.")
+@bot.tree.command(name="addmission", description="Ajoute une nouvelle quête au catalogue global du serveur.")
 @app_commands.describe(categorie="commune, moyenne, difficile, royal", texte="Contenu de l'objectif", temps="Exemple: 2h, 3j, 45min")
 async def addmission(interaction: discord.Interaction, categorie: str, texte: str, temps: str):
     if not verifier_permissions_staff(interaction.user):
@@ -905,10 +951,9 @@ async def addmission(interaction: discord.Interaction, categorie: str, texte: st
         await interaction.response.send_message("❌ Catégorie invalide.", ephemeral=True)
         return
     
-    sauvegarder_mission_fichier(cat, texte, temps)
-    global missions_dispo
-    missions_dispo = charger_missions_fichier()
-    await interaction.response.send_message(f"⚜️ **Mission ajoutée !** (`{cat}` : *{texte}* pendant {temps})")
+    sauvegarder_mission_fichier(interaction.guild.id, cat, texte, temps)
+    await interaction.response.send_message(f"⚜️ **Mission ajoutée pour ce serveur !** (`{cat}` : *{texte}* pendant {temps})")
+    await envoyer_log_proprietaire(bot, f"Ajout d'une mission sur {interaction.guild.name} ({cat} : {texte})")
 
 @bot.tree.command(name="delmission", description="Supprime une mission existante du fichier de configuration.")
 @app_commands.describe(categorie="commune, moyenne, difficile, royal", numero="Le numéro affiché sur le /listemissions")
@@ -923,12 +968,13 @@ async def delmission(interaction: discord.Interaction, categorie: str, numero: i
     elif cat in ["royal", "royale"]: cat = "royal"
     
     index = numero - 1
-    global missions_dispo
-    missions_dispo = charger_missions_fichier()
+    guild_id = interaction.guild.id
+    missions_dispo = charger_missions_fichier(guild_id)
     if cat in missions_dispo and 0 <= index < len(missions_dispo[cat]):
         retiree = missions_dispo[cat].pop(index)
-        réécrire_toutes_missions(missions_dispo)
-        await interaction.response.send_message(f"🗑️ Mission *\"{retiree['texte']}\"* supprimée de l'index.")
+        réécrire_toutes_missions(guild_id, missions_dispo)
+        await interaction.response.send_message(f"🗑️ Mission *\"{retiree['texte']}\"* supprimée de l'index de ce serveur.")
+        await envoyer_log_proprietaire(bot, f"Suppression d'une mission sur {interaction.guild.name} ({retiree['texte']})")
     else:
         await interaction.response.send_message("❌ Numéro introuvable dans cette catégorie.", ephemeral=True)
 
