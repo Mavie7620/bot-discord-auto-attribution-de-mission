@@ -8,6 +8,7 @@ import asyncio
 from threading import Thread
 from flask import Flask
 from datetime import datetime, timedelta
+import io
 
 app = Flask('')
 
@@ -152,7 +153,7 @@ async def action_refuser_mission(joueur_id, channel):
 async def action_demander_preuve(joueur_id, channel, guild):
     if joueur_id in missions_actives:
         m_info = missions_actives[joueur_id]
-        m_info["en_attente"] = True  # Mettre en pause le chrono
+        m_info["en_attente"] = True
         
         member = guild.get_member(joueur_id)
         if member:
@@ -193,8 +194,8 @@ async def gerer_expiration_automatique(guild, channel_id, joueur_id):
             channel_final = bot.get_channel(channel_id)
             if channel_final:
                 try:
-                    await channel_final.delete(reason="Expiration de l'ordre de mission (2 heures d'inactivité au total)")
-                    await envoyer_double_notification(guild, "", f"🗑️ Le ticket d'ordre de {mention_joueur} a été supprimé automatiquement pour inactivité (1h attente + 1h avertissement).")
+                    await channel_final.delete(reason="Expiration de l'ordre de mission")
+                    await envoyer_double_notification(guild, "", f"🗑️ Le ticket d'ordre de {mention_joueur} a été supprimé automatiquement pour inactivité.")
                 except Exception as e:
                     print(f"Erreur lors de la suppression : {e}")
 
@@ -443,25 +444,19 @@ class VueEvaluationMission(discord.ui.View):
         chan_cible = bot.get_channel(m_info["channel_id"]) if m_info else interaction.channel
         await action_demander_preuve(self.joueur_id, chan_cible, interaction.guild)
 
-# --- NOUVELLE COMMANDE TEXTUELLE !IMPORT ---
+
+# --- COMMANDE TEXTUELLE !IMPORT (Existante) ---
 
 @bot.command(name="import")
 async def importer_missions(ctx, mode: str = "texte"):
-    """
-    Utilise '!import tout' pour injecter directement toutes les missions officielles d'un coup,
-    ou '!import' pour coller dynamiquement ton bloc de texte personnalisé.
-    """
-    # Vérification optionnelle des permissions staff pour la commande !import
     if not verifier_permissions_staff(ctx.author):
         await ctx.send("❌ Permission refusée.")
         return
 
     global missions_dispo
 
-    # Option 1 : Injection directe de toutes les missions officielles
     if mode.lower() == "tout":
         missions_a_restaurer = [
-            # Commune
             ("commune", "récolter 3 stacks de diamants", "3 jours"),
             ("commune", "récolter 3 minerais obscur", "3 jours"),
             ("commune", "récolter 2 fibres de bois millénaires", "3 jours"),
@@ -473,7 +468,6 @@ async def importer_missions(ctx, mode: str = "texte"):
             ("commune", "craft 3 stack de steel compressé", "3 jours"),
             ("commune", "récolter 32 minerais d'ashtone ( minerais se trouvant sur le plafond du nether )", "3 jours"),
             
-            # Moyenne
             ("moyenne", "crafter un paneau solaire de tier 1", "7 jours"),
             ("moyenne", "récolter un stack de blocs de diamants", "7 jours"),
             ("moyenne", "recolter un dc de mais", "7 jours"),
@@ -496,7 +490,6 @@ async def importer_missions(ctx, mode: str = "texte"):
             ("moyenne", "récolter un dc de tournesol", "7 jours"),
             ("moyenne", "récolté 3 stack d'ashtone ( minerais se trouvant sur le plafond du nether )", "7 jours"),
             
-            # Difficile
             ("difficile", "crafter un paneau solaire de tier 2", "15 jours"),
             ("difficile", "récolter 15 minerais obscur", "15 jours"),
             ("difficile", "récolter 8 tiber", "15 jours"),
@@ -510,7 +503,6 @@ async def importer_missions(ctx, mode: str = "texte"):
             ("difficile", "craft 1 extracteur a gaz", "15 jours"),
             ("difficile", "craft un tracteur", "15 jours"),
             
-            # Royal
             ("royal", "craft un pétrolier", "20 jours"),
             ("royal", "craft un serveur", "20 jours"),
             ("royal", "récolter 30 minerais obscur", "20 jours"),
@@ -526,7 +518,6 @@ async def importer_missions(ctx, mode: str = "texte"):
         await ctx.send(f"✅ **Succès !** Les {len(missions_a_restaurer)} missions officielles ont toutes été injectées d'un coup dans le fichier.")
         return
 
-    # Option 2 : Importation interactive par collage de texte si tu tapes juste "!import"
     await ctx.send("📥 **Envoie ou colle ton bloc de missions** (avec tes catégories et tes listes) dans les 60 secondes qui suivent :")
 
     def check(m):
@@ -589,6 +580,42 @@ async def importer_missions(ctx, mode: str = "texte"):
     missions_dispo = charger_missions_fichier()
     await ctx.send(f"✅ **Succès !** {nb_ajoutees} missions ont été importées dynamiquement depuis ton message.")
 
+
+# --- NOUVELLE COMMANDE TEXTUELLE !EXPORT ---
+
+@bot.command(name="export")
+async def exporter_missions(ctx):
+    """
+    Génère et envoie un fichier texte contenant toutes les missions actuelles,
+    prêt à être réutilisé avec la commande !import.
+    """
+    if not verifier_permissions_staff(ctx.author):
+        await ctx.send("❌ Permission refusée.")
+        return
+
+    if not os.path.exists(FILE_NAME):
+        await ctx.send("❌ Aucun fichier de missions (`missions.txt`) trouvé.")
+        return
+
+    try:
+        with open(FILE_NAME, "r", encoding="utf-8") as f:
+            contenu = f.read()
+
+        if not contenu.strip():
+            await ctx.send("⚠️ Le fichier de missions est actuellement vide.")
+            return
+
+        # Création d'un fichier virtuel en mémoire à envoyer sur Discord
+        buffer = io.BytesIO(contenu.encode("utf-8"))
+        buffer.seek(0)
+        
+        fichier_discord = discord.File(buffer, filename="missions.txt")
+        await ctx.send("📤 **Voici l'export complet de tes missions actuelles :**\n*Tu peux le sauvegarder ou le réinjecter ultérieurement.*", file=fichier_discord)
+
+    except Exception as e:
+        await ctx.send(f"❌ Une erreur est survenue lors de l'export : {e}")
+
+
 # --- ÉVÉNEMENTS DU BOT ---
 
 @bot.event
@@ -604,7 +631,6 @@ async def on_ready():
 
 @bot.event
 async def on_message(message):
-    # Traitement des commandes textuelles préfixées par ! (comme !import)
     await bot.process_commands(message)
 
     if message.author.bot: return
@@ -636,7 +662,8 @@ async def generer_panneau_aide(interaction: discord.Interaction):
             "`/missionrefuser` ↳ Forcer l'échec d'un joueur.\n"
             "`/missionpreuve` ↳ Exiger un screen.\n\n"
             "📂 **BASE DE DONNÉES**\n"
-            "`/listemissions` | `/addmission` | `/delmission`"
+            "`/listemissions` | `/addmission` | `/delmission`\n"
+            "*(Commandes texte : `!export` / `!import`)*"
         )
         embed.add_field(name="👑 ADMINISTRATION", value=admin_desc, inline=False)
     await interaction.response.send_message(embed=embed, view=VueBoutonTicket())
@@ -783,7 +810,7 @@ async def tutoadm(interaction: discord.Interaction):
     )
     embed_tuto.add_field(
         name="🛠️ 2. Commandes d'Urgence Manuelles",
-        value="`/missionaccepter [joueur]` -> Clôture en Succès.\n`/missionrefuser [joueur]` -> Clôture en Échec.\n`/missionpreuve [joueur]` -> Réouvre le salon pour screen.\n`/mission_expiration [joueur]` -> Menace d'archivage d'un ticket vide (1h).",
+        value="`/missionaccepter [joueur]` -> Clôture en Succès.\n`/missionrefuser [joueur]` -> Clôture en Échec.\n`/missionpreuve [joueur]` -> Réouvre le salon pour screen.\n`/mission_expiration [joueur]` -> Menace d'archivage d'un ticket vide (1h).\n*(Commandes texte : `!export` pour récupérer le txt des missions, `!import` pour les charger)*",
         inline=False
     )
     await interaction.response.send_message(embed_tuto, ephemeral=True)
