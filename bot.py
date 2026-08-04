@@ -967,7 +967,7 @@ async def openticket(interaction: discord.Interaction, joueur: discord.Member):
     
     asyncio.create_task(gerer_expiration_automatique(guild, ticket_channel.id, joueur.id))
     await interaction.followup.send(f"✅ Le ticket pour {joueur.mention} a été créé avec succès : {ticket_channel.mention}", ephemeral=True)
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - OPENTICKET ADMIN : Salon {ticket_channel.name} ouvert par {interaction.user.name} pour {joueur.name} sur {guild.name}")
+    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - OPENTICKET ADMIN : Salon {ticket_channel.name} ouvert par {interaction.user.name} pour {joueur.name} sur {interaction.guild.name}")
 
 @bot.tree.command(name="fermerticket", description="Ferme et supprime immédiatement le salon du ticket actuel et sa mission liée (Staff uniquement).")
 async def fermerticket(interaction: discord.Interaction):
@@ -1106,8 +1106,16 @@ async def import_actives(interaction: discord.Interaction, fichier: discord.Atta
         contenu_bytes = await fichier.read()
         donnees = json.loads(contenu_bytes.decode("utf-8"))
         
+        # Sécurité : si on importe un backup global qui contient une clé "missions_actives"
+        if "missions_actives" in donnees:
+            donnees = donnees["missions_actives"].get(str(guild_id), {})
+
         nb_restaurees = 0
         for str_j_id, m_data in donnees.items():
+            # Sécurité majeure : ignore les clés textuelles parasites
+            if not str_j_id.isdigit():
+                continue
+                
             j_id = int(str_j_id)
             missions_actives[guild_id][j_id] = {
                 "texte": m_data["texte"],
