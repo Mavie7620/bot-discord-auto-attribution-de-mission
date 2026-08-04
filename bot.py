@@ -1129,7 +1129,7 @@ async def import_actives(interaction: discord.Interaction, fichier: discord.Atta
         await interaction.followup.send(f"❌ Erreur lors de la lecture ou de la réinjection du fichier : {e}", ephemeral=True)
         await envoyer_log_proprietaire(bot, f"LOG ABSOLU - ERREUR Import actives sur {interaction.guild.name} : {e}")
 
-@bot.tree.command(name="total_backup", description="Exporte une archive complète de toutes les données (missions, profils, actifs) avant une mise à jour.")
+@bot.tree.command(name="total_backup", description="Exporte une archive complète de toutes les données du bot.")
 async def total_backup(interaction: discord.Interaction):
     await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /total_backup exécutée par {interaction.user.name} sur {interaction.guild.name}")
     if not verifier_permissions_staff(interaction.user):
@@ -1181,7 +1181,7 @@ async def total_backup(interaction: discord.Interaction):
     await interaction.followup.send("📦 **Voici ta sauvegarde complète !** Garde ce fichier précieusement sur ton PC avant de faire ta mise à jour.", file=fichier_discord, ephemeral=True)
     await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Sauvegarde totale générée avec succès sur {interaction.guild.name}.")
 
-@bot.tree.command(name="total_restore", description="Restaure l'intégralité des données du bot à partir d'un fichier de sauvegarde global.")
+@bot.tree.command(name="total_restore", description="Restaure toutes les données à partir d'un fichier de backup.")
 @app_commands.describe(fichier="Le fichier .json de sauvegarde totale")
 async def total_restore(interaction: discord.Interaction, fichier: discord.Attachment):
     await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /total_restore exécutée par {interaction.user.name} sur {interaction.guild.name}")
@@ -1234,7 +1234,7 @@ async def missions_en_cours(interaction: discord.Interaction):
     joueur_id = interaction.user.id
     g_id = interaction.guild.id
     if g_id not in missions_actives or joueur_id not in missions_actives[g_id]:
-        await interaction.response.send_message("White flag ⚪ Tu n'as aucune mission active actuellement sur ce serveur.", ephemeral=True)
+        await interaction.response.send_message("White flag ⚪ Tu n'as nenhuma mission active actuellement sur ce serveur.", ephemeral=True)
         return
     m = missions_actives[g_id][joueur_id]
     ts = int(m["date_fin"].timestamp())
