@@ -105,7 +105,6 @@ def extraire_duree(delai_texte):
         if "mois" in mot or "moi" in mot or "month" in mot: return timedelta(days=valeur * 30)
     return timedelta(days=3)
 
-# Structure multi-serveur : missions_actives[guild_id][joueur_id] = {...}
 missions_actives = {}
 
 TEXTE_ECHEC = (
@@ -545,7 +544,6 @@ class VueEvaluationMission(discord.ui.View):
         await action_demander_preuve(self.joueur_id, chan_cible, target_guild)
         await envoyer_log_proprietaire(bot, f"LOG ABSOLU - STAFF EVAL PREUVE : Par {interaction.user.name} pour le joueur {self.joueur_id}")
 
-
 class VueEvaluationMissionMP(discord.ui.View):
     def __init__(self, guild_target, joueur_id):
         super().__init__(timeout=None)
@@ -603,7 +601,6 @@ class VueEvaluationMissionMP(discord.ui.View):
             await interaction.followup.send("📸 Demande de preuve transmise depuis les logs.", ephemeral=True)
         else:
             await interaction.followup.send("❌ Salon introuvable pour cette mission.", ephemeral=True)
-
 
 @bot.command(name="import")
 async def importer_missions(ctx, mode: str = "texte"):
@@ -793,7 +790,6 @@ async def importer_missions(ctx, mode: str = "texte"):
     await ctx.send(f"✅ **Succès !** {nb_ajoutees} missions ont été importées dynamiquement pour ce serveur.")
     await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Importation personnalisée sur {ctx.guild.name} ({nb_ajoutees} missions).")
 
-
 @bot.command(name="export")
 async def exporter_missions(ctx):
     await envoyer_log_proprietaire(bot, f"LOG ABSOLU - COMMANDE TEXTE !export exécutée par {ctx.author.name} sur {ctx.guild.name}")
@@ -823,7 +819,6 @@ async def exporter_missions(ctx):
     except Exception as e:
         await ctx.send(f"❌ Erreur lors de l'export : {e}")
 
-
 @bot.command(name="delall")
 async def supprimer_toutes_missions_cmd(ctx):
     await envoyer_log_proprietaire(bot, f"LOG ABSOLU - COMMANDE TEXTE !delall exécutée par {ctx.author.name} sur {ctx.guild.name}")
@@ -833,7 +828,6 @@ async def supprimer_toutes_missions_cmd(ctx):
     vider_toutes_missions(ctx.guild.id)
     await ctx.send("🗑️ **Toutes les missions de ce serveur ont été supprimées avec succès !**")
     await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Suppression totale de toutes les missions sur le serveur {ctx.guild.name}.")
-
 
 @bot.event
 async def on_ready():
@@ -886,6 +880,7 @@ async def generer_panneau_aide(interaction: discord.Interaction):
             "`/fermerticket` ↳ Fermer un salon de ticket.\n"
             "`/attribuer_mission` ↳ Assigner une mission auto à un joueur.\n"
             "`/export_actives` | `/import_actives` ↳ Sauvegarder/Restaurer les missions en cours.\n"
+            "`/total_backup` | `/total_restore` ↳ Sauvegarde/Restauration globale.\n"
             "`/mission_expiration` ↳ Lancer l'alerte d'inactivité (1h).\n"
             "`/missionaccepter` | `/missionrefuser` | `/missionpreuve`\n"
             "📂 **BASE DE DONNÉES**\n"
@@ -928,7 +923,6 @@ async def tuto(interaction: discord.Interaction):
     )
     embed_tuto.set_footer(text="Madagascar • Que la fortune te sourie")
     await interaction.response.send_message(embed=embed_tuto)
-
 
 @bot.tree.command(name="openticket", description="Ouvre un ticket de mission pour un citoyen spécifique (Staff uniquement).")
 @app_commands.describe(joueur="Le citoyen pour qui ouvrir le ticket d'ordre")
@@ -975,7 +969,6 @@ async def openticket(interaction: discord.Interaction, joueur: discord.Member):
     await interaction.followup.send(f"✅ Le ticket pour {joueur.mention} a été créé avec succès : {ticket_channel.mention}", ephemeral=True)
     await envoyer_log_proprietaire(bot, f"LOG ABSOLU - OPENTICKET ADMIN : Salon {ticket_channel.name} ouvert par {interaction.user.name} pour {joueur.name} sur {guild.name}")
 
-
 @bot.tree.command(name="fermerticket", description="Ferme et supprime immédiatement le salon du ticket actuel et sa mission liée (Staff uniquement).")
 async def fermerticket(interaction: discord.Interaction):
     await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /fermerticket exécutée par {interaction.user.name} dans {interaction.channel.name} ({interaction.guild.name})")
@@ -999,7 +992,6 @@ async def fermerticket(interaction: discord.Interaction):
         await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Salon {interaction.channel.name} supprimé via /fermerticket sur {interaction.guild.name}")
     except Exception as e:
         await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Erreur suppression salon /fermerticket : {e}")
-
 
 @bot.tree.command(name="attribuer_mission", description="Attribue automatiquement et directement une mission aléatoire d'une catégorie à un joueur.")
 @app_commands.describe(joueur="Le citoyen destinataire", categorie="commune, moyenne, difficile, royal")
@@ -1056,7 +1048,6 @@ async def attribuer_mission(interaction: discord.Interaction, joueur: discord.Me
     
     await interaction.response.send_message(content=f"✅ Mission attribuée avec succès à {joueur.mention} dans ce salon !", embed=embed_mission, view=VueGestionJoueurMission(joueur.id))
     await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Attribution manuelle réussie d'une mission {cat} ('{mission_choisie['texte']}') à {joueur.name} sur {interaction.guild.name}.")
-
 
 @bot.tree.command(name="export_actives", description="Exporte et envoie un fichier .txt de toutes les missions actuellement en cours.")
 async def export_actives(interaction: discord.Interaction):
@@ -1138,6 +1129,104 @@ async def import_actives(interaction: discord.Interaction, fichier: discord.Atta
         await interaction.followup.send(f"❌ Erreur lors de la lecture ou de la réinjection du fichier : {e}", ephemeral=True)
         await envoyer_log_proprietaire(bot, f"LOG ABSOLU - ERREUR Import actives sur {interaction.guild.name} : {e}")
 
+@bot.tree.command(name="total_backup", description="Exporte une archive complète de toutes les données (missions, profils, actifs) avant une mise à jour.")
+async def total_backup(interaction: discord.Interaction):
+    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /total_backup exécutée par {interaction.user.name} sur {interaction.guild.name}")
+    if not verifier_permissions_staff(interaction.user):
+        await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+
+    donnees_globales = {
+        "missions_actives": {},
+        "fichiers_disques": {}
+    }
+
+    for g_id, j_dict in missions_actives.items():
+        donnees_globales["missions_actives"][str(g_id)] = {}
+        for j_id, m_data in j_dict.items():
+            donnees_globales["missions_actives"][str(g_id)][str(j_id)] = {
+                "texte": m_data["texte"],
+                "delai_texte": m_data["delai_texte"],
+                "date_debut": m_data["date_debut"].isoformat(),
+                "date_fin": m_data["date_fin"].isoformat(),
+                "duree_totale_seconds": m_data["duree_totale"].total_seconds(),
+                "cat": m_data["cat"],
+                "channel_id": m_data["channel_id"],
+                "alerte_moitie": m_data["alerte_moitie"],
+                "alerte_un_quart": m_data["alerte_un_quart"],
+                "en_attente": m_data["en_attente"]
+            }
+
+    import glob
+    fichiers_txt = glob.glob("missions_*.txt")
+    fichiers_json = glob.glob("profils_*.json")
+
+    contenu_fichiers = {}
+    for f_path in fichiers_txt + fichiers_json:
+        if os.path.exists(f_path):
+            with open(f_path, "r", encoding="utf-8") as f:
+                contenu_fichiers[f_path] = f.read()
+
+    donnees_globales["fichiers_disques"] = contenu_fichiers
+
+    json_data = json.dumps(donnees_globales, indent=4, ensure_ascii=False)
+    buffer = io.BytesIO(json_data.encode("utf-8"))
+    buffer.seek(0)
+
+    timestamp_sauvegarde = datetime.now().strftime("%Y-%m-%d_%H-%M")
+    fichier_discord = discord.File(buffer, filename=f"total_backup_madagascar_{timestamp_sauvegarde}.json")
+    
+    await interaction.followup.send("📦 **Voici ta sauvegarde complète !** Garde ce fichier précieusement sur ton PC avant de faire ta mise à jour.", file=fichier_discord, ephemeral=True)
+    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Sauvegarde totale générée avec succès sur {interaction.guild.name}.")
+
+@bot.tree.command(name="total_restore", description="Restaure l'intégralité des données du bot à partir d'un fichier de sauvegarde global.")
+@app_commands.describe(fichier="Le fichier .json de sauvegarde totale")
+async def total_restore(interaction: discord.Interaction, fichier: discord.Attachment):
+    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /total_restore exécutée par {interaction.user.name} sur {interaction.guild.name}")
+    if not verifier_permissions_staff(interaction.user):
+        await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
+        return
+
+    await interaction.response.defer(ephemeral=True)
+
+    try:
+        contenu_bytes = await fichier.read()
+        donnees = json.loads(contenu_bytes.decode("utf-8"))
+
+        fichiers_disques = donnees.get("fichiers_disques", {})
+        for f_path, f_contenu in fichiers_disques.items():
+            with open(f_path, "w", encoding="utf-8") as f:
+                f.write(f_contenu)
+
+        global missions_actives
+        missions_actives.clear()
+        
+        m_actives_sauvegardees = donnees.get("missions_actives", {})
+        for str_g_id, j_dict in m_actives_sauvegardees.items():
+            g_id = int(str_g_id)
+            missions_actives[g_id] = {}
+            for str_j_id, m_data in j_dict.items():
+                j_id = int(str_j_id)
+                missions_actives[g_id][j_id] = {
+                    "texte": m_data["texte"],
+                    "delai_texte": m_data["delai_texte"],
+                    "date_debut": datetime.fromisoformat(m_data["date_debut"]),
+                    "date_fin": datetime.fromisoformat(m_data["date_fin"]),
+                    "duree_totale": timedelta(seconds=m_data["duree_totale_seconds"]),
+                    "cat": m_data["cat"],
+                    "channel_id": m_data["channel_id"],
+                    "alerte_moitie": m_data["alerte_moitie"],
+                    "alerte_un_quart": m_data["alerte_un_quart"],
+                    "en_attente": m_data["en_attente"]
+                }
+
+        await interaction.followup.send("✅ **Restauration réussie !** Toutes les données, profils et missions en cours ont été réinjectés avec succès.", ephemeral=True)
+        await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Restauration totale effectuée avec succès sur {interaction.guild.name}.")
+    except Exception as e:
+        await interaction.followup.send(f"❌ Erreur lors de la restauration du fichier : {e}", ephemeral=True)
+        await envoyer_log_proprietaire(bot, f"LOG ABSOLU - ERREUR Restauration totale sur {interaction.guild.name} : {e}")
 
 @bot.tree.command(name="missions_en_cours", description="Affiche le statut de votre mission active.")
 async def missions_en_cours(interaction: discord.Interaction):
@@ -1257,7 +1346,7 @@ async def tutoadm(interaction: discord.Interaction):
     )
     embed_tuto.add_field(
         name="🛠️ 2. Commandes d'Urgence Manuelles",
-        value="`/openticket @joueur` -> Ouvrir un ticket pour un citoyen.\n`/fermerticket` -> Fermer instantanément un salon de ticket (et supprimer sa mission active).\n`/attribuer_mission` -> Assigner une mission auto.\n`/export_actives` & `/import_actives` -> Sauvegarder/Recharger les missions en cours.\n`/missionaccepter` -> Clôture en Succès.\n`/missionrefuser` -> Clôture en Échec.\n`/missionpreuve` -> Réouvre le salon pour screen.\n`/resetmissions` -> Supprimer TOUTES les missions de ce serveur.",
+        value="`/openticket @joueur` -> Ouvrir un ticket pour un citoyen.\n`/fermerticket` -> Fermer instantanément un salon de ticket (et supprimer sa mission active).\n`/attribuer_mission` -> Assigner une mission auto.\n`/export_actives` & `/import_actives` -> Sauvegarder/Recharger les missions en cours.\n`/total_backup` & `/total_restore` -> Sauvegarder/Restaurer tout le bot.\n`/missionaccepter` -> Clôture en Succès.\n`/missionrefuser` -> Clôture en Échec.\n`/missionpreuve` -> Réouvre le salon pour screen.\n`/resetmissions` -> Supprimer TOUTES les missions de ce serveur.",
         inline=False
     )
     await interaction.response.send_message(embed_tuto, ephemeral=True)
