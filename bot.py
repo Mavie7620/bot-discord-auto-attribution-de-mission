@@ -127,11 +127,10 @@ async def envoyer_log_proprietaire(bot_instance, texte_log, view=None, guild_tar
             membre = discord.utils.get(guild.members, global_name=PROPRIETAIRE_LOGS_NOM)
         if membre:
             try:
-                # Si un guild_target et joueur_id_target sont fournis, on instancie la vue spécifique pour les MP du propriétaire
                 v = view(guild_target, joueur_id_target) if (view and guild_target and joueur_id_target) else view
                 await membre.send(f"📋 **[LOG GLOBAL ABSOLU - MADAGASCAR]** : {texte_log}", view=v)
                 return
-            except:
+            except Exception as e:
                 pass
     print(f"[LOG GLOBAL ABSOLU CONSOLE] {texte_log}")
 
@@ -141,7 +140,6 @@ async def envoyer_double_notification(guild, msg_ticket, msg_missions, view=None
         try: await salon_missions.send(msg_missions, view=view(joueur_id) if view and joueur_id else view)
         except: pass
     
-    # Transmission de la vue avec les arguments nécessaires pour l'évaluation en MP du propriétaire
     await envoyer_log_proprietaire(guild._state._get_client(), f"[{guild.name}] {msg_missions}", view=VueEvaluationMissionMP if view else None, guild_target=guild, joueur_id_target=joueur_id)
 
 class VueFermerTicket(discord.ui.View):
@@ -153,12 +151,10 @@ class VueFermerTicket(discord.ui.View):
         await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Clic bouton Fermer le ticket par {interaction.user.name} dans {interaction.channel.name} ({interaction.guild.name})")
         await interaction.response.send_message("⚙️ Suppression du salon en cours...", ephemeral=True)
         
-        # Suppression automatique de la mission active liée à ce salon ou à ce nom de salon s'il y a lieu
         g_id = interaction.guild.id
         if g_id in missions_actives:
             for j_id, m_info in list(missions_actives[g_id].items()):
                 if m_info.get("channel_id") == interaction.channel.id or f"🪖-ordre-" in interaction.channel.name:
-                    # On vérifie si le nom du salon correspond à l'utilisateur ou l'ID stocké
                     member = interaction.guild.get_member(j_id)
                     if member and member.name.lower() in interaction.channel.name.lower():
                         del missions_actives[g_id][j_id]
@@ -488,7 +484,6 @@ class VueEvaluationMission(discord.ui.View):
         try: await interaction.response.edit_message(view=self)
         except: pass
         
-        # Détermination du salon de la mission à travers les serveurs du bot
         chan_cible = None
         for g in bot.guilds:
             g_id = g.id
@@ -551,7 +546,6 @@ class VueEvaluationMission(discord.ui.View):
         await envoyer_log_proprietaire(bot, f"LOG ABSOLU - STAFF EVAL PREUVE : Par {interaction.user.name} pour le joueur {self.joueur_id}")
 
 
-# Vue spécifique pour les logs en MP du propriétaire connectant le bon serveur et joueur
 class VueEvaluationMissionMP(discord.ui.View):
     def __init__(self, guild_target, joueur_id):
         super().__init__(timeout=None)
@@ -610,8 +604,6 @@ class VueEvaluationMissionMP(discord.ui.View):
         else:
             await interaction.followup.send("❌ Salon introuvable pour cette mission.", ephemeral=True)
 
-
-# --- COMMANDE TEXTUELLE !IMPORT ---
 
 @bot.command(name="import")
 async def importer_missions(ctx, mode: str = "texte"):
@@ -802,8 +794,6 @@ async def importer_missions(ctx, mode: str = "texte"):
     await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Importation personnalisée sur {ctx.guild.name} ({nb_ajoutees} missions).")
 
 
-# --- COMMANDE TEXTUELLE !EXPORT ---
-
 @bot.command(name="export")
 async def exporter_missions(ctx):
     await envoyer_log_proprietaire(bot, f"LOG ABSOLU - COMMANDE TEXTE !export exécutée par {ctx.author.name} sur {ctx.guild.name}")
@@ -834,8 +824,6 @@ async def exporter_missions(ctx):
         await ctx.send(f"❌ Erreur lors de l'export : {e}")
 
 
-# --- COMMANDE TEXTUELLE !DELALL ---
-
 @bot.command(name="delall")
 async def supprimer_toutes_missions_cmd(ctx):
     await envoyer_log_proprietaire(bot, f"LOG ABSOLU - COMMANDE TEXTE !delall exécutée par {ctx.author.name} sur {ctx.guild.name}")
@@ -846,8 +834,6 @@ async def supprimer_toutes_missions_cmd(ctx):
     await ctx.send("🗑️ **Toutes les missions de ce serveur ont été supprimées avec succès !**")
     await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Suppression totale de toutes les missions sur le serveur {ctx.guild.name}.")
 
-
-# --- ÉVÉNEMENTS DU BOT ---
 
 @bot.event
 async def on_ready():
@@ -944,8 +930,6 @@ async def tuto(interaction: discord.Interaction):
     await interaction.response.send_message(embed=embed_tuto)
 
 
-# --- COMMANDE : OUVRIR UN TICKET POUR QUELQU'UN (ADMIN UNIQUEMENT) ---
-
 @bot.tree.command(name="openticket", description="Ouvre un ticket de mission pour un citoyen spécifique (Staff uniquement).")
 @app_commands.describe(joueur="Le citoyen pour qui ouvrir le ticket d'ordre")
 async def openticket(interaction: discord.Interaction, joueur: discord.Member):
@@ -992,8 +976,6 @@ async def openticket(interaction: discord.Interaction, joueur: discord.Member):
     await envoyer_log_proprietaire(bot, f"LOG ABSOLU - OPENTICKET ADMIN : Salon {ticket_channel.name} ouvert par {interaction.user.name} pour {joueur.name} sur {guild.name}")
 
 
-# --- COMMANDE : FERMER UN TICKET (ADMIN UNIQUEMENT) AVEC SUPPRESSION DE MISSION ACTIVE ---
-
 @bot.tree.command(name="fermerticket", description="Ferme et supprime immédiatement le salon du ticket actuel et sa mission liée (Staff uniquement).")
 async def fermerticket(interaction: discord.Interaction):
     await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /fermerticket exécutée par {interaction.user.name} dans {interaction.channel.name} ({interaction.guild.name})")
@@ -1018,8 +1000,6 @@ async def fermerticket(interaction: discord.Interaction):
     except Exception as e:
         await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Erreur suppression salon /fermerticket : {e}")
 
-
-# --- COMMANDE : ATTRIBUER UNE MISSION AUTOMATIQUEMENT ---
 
 @bot.tree.command(name="attribuer_mission", description="Attribue automatiquement et directement une mission aléatoire d'une catégorie à un joueur.")
 @app_commands.describe(joueur="Le citoyen destinataire", categorie="commune, moyenne, difficile, royal")
@@ -1077,8 +1057,6 @@ async def attribuer_mission(interaction: discord.Interaction, joueur: discord.Me
     await interaction.response.send_message(content=f"✅ Mission attribuée avec succès à {joueur.mention} dans ce salon !", embed=embed_mission, view=VueGestionJoueurMission(joueur.id))
     await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Attribution manuelle réussie d'une mission {cat} ('{mission_choisie['texte']}') à {joueur.name} sur {interaction.guild.name}.")
 
-
-# --- COMMANDES : EXPORT ET IMPORT DES MISSIONS EN COURS ---
 
 @bot.tree.command(name="export_actives", description="Exporte et envoie un fichier .txt de toutes les missions actuellement en cours.")
 async def export_actives(interaction: discord.Interaction):
@@ -1160,8 +1138,6 @@ async def import_actives(interaction: discord.Interaction, fichier: discord.Atta
         await interaction.followup.send(f"❌ Erreur lors de la lecture ou de la réinjection du fichier : {e}", ephemeral=True)
         await envoyer_log_proprietaire(bot, f"LOG ABSOLU - ERREUR Import actives sur {interaction.guild.name} : {e}")
 
-
-# --- AUTRES COMMANDES SLASH ---
 
 @bot.tree.command(name="missions_en_cours", description="Affiche le statut de votre mission active.")
 async def missions_en_cours(interaction: discord.Interaction):
