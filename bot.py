@@ -13,7 +13,7 @@ import io
 app = Flask('')
 
 @app.route('/')
-def home(): return "Le bot de Madagascar est vivant !"
+def home(): return "Le bot Valerius est vivant !"
 
 def run_web(): app.run(host='0.0.0.0', port=8080)
 def keep_alive():
@@ -28,13 +28,13 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 PROPRIETAIRE_LOGS_NOM = "MAVIE7620"
 
 def get_file_name(guild_id):
-    return f"missions_{guild_id}.txt"
+    return f"valerius_missions_{guild_id}.txt"
 
 def get_profiles_file(guild_id):
-    return f"profils_{guild_id}.json"
+    return f"valerius_profils_{guild_id}.json"
 
 def get_active_missions_file(guild_id):
-    return f"missions_actives_{guild_id}.json"
+    return f"valerius_missions_actives_{guild_id}.json"
 
 def charger_missions_fichier(guild_id):
     structure = {"commune": [], "moyenne": [], "difficile": [], "royal": []}
@@ -108,11 +108,11 @@ def extraire_duree(delai_texte):
 missions_actives = {}
 
 TEXTE_ECHEC = (
-    "⚜️ **𝕾𝖞𝖘𝖙𝖊̀𝖒𝖊 𝖉𝖊 𝕸𝖎𝖘𝖘𝖎𝖔𝖓𝖘 𝖉𝖊 𝕸𝖆𝖉𝖆𝖈𝖆𝖘𝖈𝖆𝖗** ⚜️\n"
+    "⚜️ **𝕾𝖞𝖘𝖙𝖊̀𝖒𝖊 𝖉𝖊 𝕸𝖎𝖘𝖘𝖎𝖔𝖓𝖘 𝖉𝖊 𝖁𝖆𝖑𝖊𝖗𝖎𝖚𝖘** ⚜️\n"
     "**D'après l'article Ⅴ — Rappel :**\n"
     "- **Refuser ou abandonner une mission attribuée sans raison valable peut être sanctionné.**\n"
     "- *L'État récompense l'investissement et la persévérance.*\n"
-    "- *Les missions constituent l'un des principaux moyens de progresser au sein de Madagascar.*"
+    "- *Les missions constituent l'un des principaux moyens de progresser au sein de Valerius.*"
 )
 
 def verifier_permissions_staff(user):
@@ -127,7 +127,7 @@ async def envoyer_log_proprietaire(bot_instance, texte_log, view=None, guild_tar
         if membre:
             try:
                 v = view(guild_target, joueur_id_target) if (view and guild_target and joueur_id_target) else view
-                await membre.send(f"📋 **[LOG GLOBAL ABSOLU - MADAGASCAR]** : {texte_log}", view=v)
+                await membre.send(f"📋 **[LOG GLOBAL ABSOLU - VALERIUS]** : {texte_log}", view=v)
                 return
             except Exception as e:
                 pass
@@ -341,7 +341,7 @@ class VueBoutonTicket(discord.ui.View):
 
         embed_ticket = discord.Embed(
             title="⚜️ CENTRE DE SÉLECTION DES DÉCRETS ⚜️",
-            description=f"Bienvenue {joueur.mention}.\nChoisis la difficulté de l'objectif que tu souhaites accomplir aujourd'hui pour Madagascar.",
+            description=f"Bienvenue {joueur.mention}.\nChoisis la difficulté de l'objectif que tu souhaites accomplir aujourd'hui pour Valerius.",
             color=discord.Color.dark_red()
         )
         await ticket_channel.send(embed=embed_ticket, view=VueChoixDifficulte(joueur.id))
@@ -836,7 +836,7 @@ async def on_ready():
     bot.add_view(VueFermerTicket())
     try:
         synced = await bot.tree.sync()
-        print(f"Bot MADAmission Pro — {len(synced)} Commandes Slash synchronisées !")
+        print(f"Bot Valerius Pro — {len(synced)} Commandes Slash synchronisées !")
         await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Bot prêt. {len(synced)} commandes synchronisées avec succès.")
     except Exception as e:
         print(f"Erreur de synchronisation slash: {e}")
@@ -861,7 +861,7 @@ async def on_message(message):
 
 async def generer_panneau_aide(interaction: discord.Interaction):
     await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /aide ou /help exécutée par {interaction.user.name} sur {interaction.guild.name}")
-    embed = discord.Embed(title="⚜️ TABLEAU DES ORDRES DE MADAGASCAR ⚜️", color=discord.Color.gold())
+    embed = discord.Embed(title="⚜️ TABLEAU DES ORDRES DE VALERIUS ⚜️", color=discord.Color.gold())
     citoyen_desc = (
         "⚔️ **SYSTÈMÈ DE QUÊTES**\n"
         "Ouvre un ticket d'ordre privé dans la catégorie dédiée.\n\n"
@@ -890,11 +890,11 @@ async def generer_panneau_aide(interaction: discord.Interaction):
         embed.add_field(name="👑 ADMINISTRATION", value=admin_desc, inline=False)
     await interaction.response.send_message(embed=embed, view=VueBoutonTicket())
 
-@bot.tree.command(name="aide", description="Affiche le tableau de bord des quêtes de Madagascar.")
+@bot.tree.command(name="aide", description="Affiche le tableau de bord des quêtes de Valerius.")
 async def aide(interaction: discord.Interaction):
     await generer_panneau_aide(interaction)
 
-@bot.tree.command(name="help", description="Affiche le tableau de bord des quêtes de Madagascar.")
+@bot.tree.command(name="help", description="Affiche le tableau de bord des quêtes de Valerius.")
 async def help_cmd(interaction: discord.Interaction):
     await generer_panneau_aide(interaction)
 
@@ -902,7 +902,7 @@ async def help_cmd(interaction: discord.Interaction):
 async def tuto(interaction: discord.Interaction):
     await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /tuto exécutée par {interaction.user.name} sur {interaction.guild.name}")
     embed_tuto = discord.Embed(
-        title="🪖 GUIDE DU CITOYEN DE MADAGASCAR 🪖",
+        title="🪖 GUIDE DU CITOYEN DE VALERIUS 🪖",
         description="Suis ces instructions impériales pour mener à bien tes décrets sans subir les foudres de l'Article V !",
         color=discord.Color.green()
     )
@@ -921,7 +921,7 @@ async def tuto(interaction: discord.Interaction):
         value="Une fois ton objectif réalisé en jeu, utilise le bouton vert **Finir la mission** ou la commande `/missionaccomplie`.",
         inline=False
     )
-    embed_tuto.set_footer(text="Madagascar • Que la fortune te sourie")
+    embed_tuto.set_footer(text="Valerius • Que la fortune te sourie")
     await interaction.response.send_message(embed=embed_tuto)
 
 @bot.tree.command(name="openticket", description="Ouvre un ticket de mission pour un citoyen spécifique (Staff uniquement).")
@@ -960,7 +960,7 @@ async def openticket(interaction: discord.Interaction, joueur: discord.Member):
 
     embed_ticket = discord.Embed(
         title="⚜️ CENTRE DE SÉLECTION DES DÉCRETS ⚜️",
-        description=f"Ticket ouvert par l'administration pour {joueur.mention}.\nChoisis la difficulté de l'objectif que tu souhaites accomplir aujourd'hui pour Madagascar.",
+        description=f"Ticket ouvert par l'administration pour {joueur.mention}.\nChoisis la difficulté de l'objectif que tu souhaites accomplir aujourd'hui pour Valerius.",
         color=discord.Color.dark_red()
     )
     await ticket_channel.send(embed=embed_ticket, view=VueChoixDifficulte(joueur.id))
@@ -1083,7 +1083,7 @@ async def export_actives(interaction: discord.Interaction):
     buffer = io.BytesIO(contenu_json.encode("utf-8"))
     buffer.seek(0)
 
-    nom_fichier = f"missions_actives_{guild_id}.txt"
+    nom_fichier = f"valerius_missions_actives_{guild_id}.txt"
     fichier_discord = discord.File(buffer, filename=nom_fichier)
     
     await interaction.response.send_message("📤 **Voici le fichier de sauvegarde de toutes les missions en cours :**", file=fichier_discord, ephemeral=True)
@@ -1168,8 +1168,8 @@ async def total_backup(interaction: discord.Interaction):
             }
 
     import glob
-    fichiers_txt = glob.glob("missions_*.txt")
-    fichiers_json = glob.glob("profils_*.json")
+    fichiers_txt = glob.glob("valerius_missions_*.txt")
+    fichiers_json = glob.glob("valerius_profils_*.json")
 
     contenu_fichiers = {}
     for f_path in fichiers_txt + fichiers_json:
@@ -1184,7 +1184,7 @@ async def total_backup(interaction: discord.Interaction):
     buffer.seek(0)
 
     timestamp_sauvegarde = datetime.now().strftime("%Y-%m-%d_%H-%M")
-    fichier_discord = discord.File(buffer, filename=f"total_backup_madagascar_{timestamp_sauvegarde}.json")
+    fichier_discord = discord.File(buffer, filename=f"total_backup_valerius_{timestamp_sauvegarde}.json")
     
     await interaction.followup.send("📦 **Voici ta sauvegarde complète !** Garde ce fichier précieusement sur ton PC avant de faire ta mise à jour.", file=fichier_discord, ephemeral=True)
     await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Sauvegarde totale générée avec succès sur {interaction.guild.name}.")
@@ -1344,7 +1344,7 @@ async def tutoadm(interaction: discord.Interaction):
         return
     embed_tuto = discord.Embed(
         title="👑 MANUEL DE L'ADMINISTRATION & DE L'INSTRUCTION 👑",
-        description="Ce guide récapitule vos privilèges pour encadrer le système de missions de Madagascar.",
+        description="Ce guide récapitule vos privilèges pour encadrer le système de missions de Valerius.",
         color=discord.Color.red()
     )
     embed_tuto.add_field(
