@@ -26,6 +26,7 @@ intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 PROPRIETAIRE_LOGS_NOM = "MAVIE7620"
+WELCOME_CHANNEL_ID = 1534600324546039829
 
 def get_file_name(guild_id):
     return f"valerius_missions_{guild_id}.txt"
@@ -117,7 +118,7 @@ TEXTE_ECHEC = (
 
 def verifier_permissions_staff(user):
     roles_noms = [r.name for r in user.roles]
-    return user.guild_permissions.administrator or "[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚𝔯 ]" in roles_noms or "Palais Royal" in roles_noms
+    return user.guild_permissions.administrator or "[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]" in roles_noms or "Palais Royal" in roles_noms
 
 async def envoyer_log_proprietaire(bot_instance, texte_log, view=None, guild_target=None, joueur_id_target=None):
     for guild in bot_instance.guilds:
@@ -176,6 +177,49 @@ class VueButinRecupere(discord.ui.View):
         except:
             pass
         await interaction.channel.send("✅ **Le butin a été récupéré avec succès par l'instructeur.**", view=VueFermerTicket())
+
+class VueAccueilArrivant(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="👑 Je suis greyjoy", style=discord.ButtonStyle.danger, custom_id="btn_greyjoy")
+    async def greyjoy_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        role_haut_grade = discord.utils.get(interaction.guild.roles, name="greyjoy") or discord.utils.get(interaction.guild.roles, name="Greyjoy")
+        mention_role = role_haut_grade.mention if role_haut_grade else "@greyjoy"
+        await interaction.response.send_message(f"🚨 Un haut gradé a été ping : {mention_role} ! Un membre s'identifie en tant que Greyjoy.", ephemeral=True)
+
+    @discord.ui.button(label="👤 Je suis un visiteurs", style=discord.ButtonStyle.secondary, custom_id="btn_visiteur")
+    async def visiteur_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        role_etranger = discord.utils.get(interaction.guild.roles, name="etranger") or discord.utils.get(interaction.guild.roles, name="Étranger")
+        if role_etranger:
+            try:
+                await interaction.user.add_roles(role_etranger)
+                await interaction.response.send_message("✅ Rôle **Étranger** attribué avec succès !", ephemeral=True)
+            except Exception as e:
+                await interaction.response.send_message(f"❌ Erreur lors de l'attribution du rôle : {e}", ephemeral=True)
+        else:
+            await interaction.response.send_message("❌ Le rôle `etranger` est introuvable sur ce serveur. Contactez un admin.", ephemeral=True)
+
+    @discord.ui.button(label="⚔️ Je souhaite etre recruter", style=discord.ButtonStyle.success, custom_id="btn_recrutement")
+    async def recrutement_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        role_recrutement = discord.utils.get(interaction.guild.roles, name="en cours de recrutement")
+        salon_attente = discord.utils.get(interaction.guild.text_channels, name="attente-moov") or discord.utils.get(interaction.guild.text_channels, name="attente moov")
+        
+        if not role_recrutement:
+            await interaction.response.send_message("❌ Le rôle `en cours de recrutement` est introuvable sur ce serveur.", ephemeral=True)
+            return
+
+        try:
+            await interaction.user.add_roles(role_recrutement)
+            
+            # Gestion des permissions pour le salon attente moov
+            if salon_attente:
+                await salon_attente.set_permissions(interaction.user, read_messages=True, send_messages=True, connect=True)
+                await interaction.response.send_message(f"✅ Tu as obtenu le rôle **en cours de recrutement** et l'accès au salon {salon_attente.mention} !", ephemeral=True)
+            else:
+                await interaction.response.send_message("✅ Rôle attribué, mais le salon `attente moov` est introuvable.", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ Une erreur est survenue : {e}", ephemeral=True)
 
 async def action_accepter_mission(joueur_id, channel):
     guild = channel.guild
@@ -850,6 +894,26 @@ async def on_ready():
     bot.add_view(VueBoutonTicket())
     bot.add_view(VueFermerTicket())
     bot.add_view(VueButinRecupere())
+    bot.add_view(VueAccueilArrivant())
+    
+    # Envoi automatique du panneau d'accueil dans le salon spécifié s'il n'y est pas déjà
+    salon_accueil = bot.get_channel(WELCOME_CHANNEL_ID)
+    if salon_accueil:
+        try:
+            # Vérifie si le message existe déjà pour éviter le spam à chaque redémarrage
+            async for msg in salon_accueil.history(limit=10):
+                if msg.author == bot.user and "Bienvenue sur Valerius" in msg.content:
+                    break
+            else:
+                embed_accueil = discord.Embed(
+                    title="⚜️ BIENVENUE SUR VALERIUS ⚜️",
+                    description="Veuillez sélectionner ci-dessous votre statut ou votre intention en arrivant sur le serveur :",
+                    color=discord.Color.gold()
+                )
+                await salon_accueil.send(content="Bienvenue sur Valerius", embed=embed_accueil, view=VueAccueilArrivant())
+        except Exception as e:
+            print(f"Erreur envoi panneau d'accueil automatique : {e}")
+
     try:
         synced = await bot.tree.sync()
         print(f"Bot Valerius Pro — {len(synced)} Commandes Slash synchronisées !")
