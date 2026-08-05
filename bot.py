@@ -239,7 +239,6 @@ class VueGestionJoueurMission(discord.ui.View):
 
     @discord.ui.button(label="🏁 Finir la mission", style=discord.ButtonStyle.success, custom_id="joueur_finir_mission")
     async def joueur_finir(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Récupération dynamique du joueur si relancé après redémarrage
         g_id = interaction.guild.id
         current_joueur_id = self.joueur_id
         if not current_joueur_id and g_id in missions_actives:
@@ -805,7 +804,6 @@ async def supprimer_toutes_missions_cmd(ctx):
 async def on_ready():
     if not verifier_temps_missions.is_running(): verifier_temps_missions.start()
     
-    # Enregistrement persistant des vues pour éviter l'erreur "Valerius n'a pas répondu à temps" après redémarrage
     bot.add_view(VueBoutonTicket())
     bot.add_view(VueFermerTicket())
     bot.add_view(VueButinRecupere())
