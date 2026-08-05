@@ -274,7 +274,7 @@ class VueGestionJoueurMission(discord.ui.View):
         if member_obj:
             await interaction.channel.set_permissions(member_obj, read_messages=True, send_messages=False)
         
-        await interaction.channel.send(f"💬 <@{target_id>>, un instructeur a été notifié. Votre demande va être traitée dans les plus brefs délais.")
+        await interaction.channel.send(f"💬 <@{target_id}>, un instructeur a été notifié. Votre demande va être traitée dans les plus brefs délais.")
         
         msg_fin = (
             f"📢 {mention_ins} ! <@{target_id}> déclare avoir fini sa mission via l'interface : *\"{m_info['texte']}\"* !\n"
@@ -961,7 +961,7 @@ async def on_message(message):
         joueur_id = message.author.id
         g_id = message.guild.id
         if g_id in missions_actives and joueur_id in missions_actives[g_id] and missions_actives[g_id][joueur_id].get("en_attente", False):
-            await message.channel.send(f"💬 {message.author.mention}, un instructeur a été ping. Votre demande a bien été envoyée et va être traitée.")
+            await message.channel.send(f"💬 <@{joueur_id}>, un instructeur a été ping. Votre demande a bien été envoyée et va être traitée.")
             msg_p = f"📸 **Preuve reçue** pour la mission de <@{joueur_id}>. En attente de l'analyse finale de l'administration :"
             await envoyer_double_notification(message.guild, msg_p, f"📸 Preuve d'accomplissement déposée par <@{joueur_id}> dans {message.channel.mention}.", view=VueEvaluationMission(joueur_id), joueur_id=joueur_id)
 
@@ -1444,7 +1444,7 @@ async def tutoadm(interaction: discord.Interaction):
         value="`/openticket @joueur` -> Ouvrir un ticket\n`/fermerticket` -> Fermer instantanément un salon de ticket\n`/attribuer_mission` -> Assigner une mission auto\n`/export_actives` & `/import_actives` -> Sauvegarder/Recharger les missions en cours\n`/total_backup` & `/total_restore` -> Sauvegarder/Restaurer tout le bot\n`/missionaccepter` / `/missionrefuser` / `/missionpreuve`",
         inline=False
     )
-    await interaction.response.send_message(embed_tuto, ephemeral=True)
+    await interaction.response.send_message(embed=embed_tuto, ephemeral=True)
 
 @bot.tree.command(name="missionaccepter", description="Valide et force manuellement le succès de la mission d'un joueur.")
 @app_commands.describe(joueur="Le citoyen à valider")
