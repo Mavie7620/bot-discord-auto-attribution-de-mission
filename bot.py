@@ -120,7 +120,7 @@ TEXTE_ECHEC = (
 
 def verifier_permissions_staff(user):
     roles_noms = [r.name for r in user.roles]
-    return user.guild_permissions.administrator or "[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]" in roles_noms or "[ Palais Royal ]" in roles_noms or "Palais Royal" in roles_noms
+    return user.guild_permissions.administrator or "[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]" in roles_noms or "[ Palais Royal ]" in roles_noms or "Palais Royal" in roles_noms or any(r.permissions.manage_channels or r.permissions.administrator for r in user.roles)
 
 async def envoyer_log_proprietaire(bot_instance, texte_log, view=None, guild_target=None, joueur_id_target=None):
     for guild in bot_instance.guilds:
@@ -397,14 +397,15 @@ class VueBoutonTicket(discord.ui.View):
         role_instructeur = discord.utils.get(guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]")
         role_palais = discord.utils.get(guild.roles, name="[ Palais Royal ]") or discord.utils.get(guild.roles, name="Palais Royal")
 
+        # Configuration des permissions : Seul le joueur, les rôles staff/instructeur/palais royal et le bot voient le salon
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            joueur: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-            guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            joueur: discord.PermissionOverwrite(read_messages=True, send_messages=True, view_channel=True),
+            guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, view_channel=True)
         }
         
-        if role_instructeur: overwrites[role_instructeur] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
-        if role_palais: overwrites[role_palais] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        if role_instructeur: overwrites[role_instructeur] = discord.PermissionOverwrite(read_messages=True, send_messages=True, view_channel=True)
+        if role_palais: overwrites[role_palais] = discord.PermissionOverwrite(read_messages=True, send_messages=True, view_channel=True)
 
         nom_salon = f"🪖-ordre-{joueur.name}"
         ticket_channel = await guild.create_text_channel(name=nom_salon, overwrites=overwrites, category=interaction.channel.category if interaction.channel.category else None)
@@ -1037,12 +1038,12 @@ async def openticket(interaction: discord.Interaction, joueur: discord.Member):
 
     overwrites = {
         guild.default_role: discord.PermissionOverwrite(read_messages=False),
-        joueur: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-        guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        joueur: discord.PermissionOverwrite(read_messages=True, send_messages=True, view_channel=True),
+        guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, view_channel=True)
     }
     
-    if role_instructeur: overwrites[role_instructeur] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
-    if role_palais: overwrites[role_palais] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+    if role_instructeur: overwrites[role_instructeur] = discord.PermissionOverwrite(read_messages=True, send_messages=True, view_channel=True)
+    if role_palais: overwrites[role_palais] = discord.PermissionOverwrite(read_messages=True, send_messages=True, view_channel=True)
 
     nom_salon = f"🪖-ordre-{joueur.name}"
     ticket_channel = await guild.create_text_channel(name=nom_salon, overwrites=overwrites, category=interaction.channel.category if interaction.channel.category else None)
