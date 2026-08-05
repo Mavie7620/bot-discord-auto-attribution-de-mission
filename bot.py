@@ -120,7 +120,7 @@ TEXTE_ECHEC = (
 
 def verifier_permissions_staff(user):
     roles_noms = [r.name for r in user.roles]
-    return user.guild_permissions.administrator or "[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]" in roles_noms or "Palais Royal" in roles_noms
+    return user.guild_permissions.administrator or "[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]" in roles_noms or "[ Palais Royal ]" in roles_noms or "Palais Royal" in roles_noms
 
 async def envoyer_log_proprietaire(bot_instance, texte_log, view=None, guild_target=None, joueur_id_target=None):
     for guild in bot_instance.guilds:
@@ -186,10 +186,10 @@ class VueAccueilArrivant(discord.ui.View):
 
     @discord.ui.button(label="👑 Je suis greyjoy", style=discord.ButtonStyle.danger, custom_id="btn_greyjoy")
     async def greyjoy_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        role_palais = discord.utils.get(interaction.guild.roles, name="Palais Royal") or discord.utils.get(interaction.guild.roles, name="palais royal")
+        role_palais = discord.utils.get(interaction.guild.roles, name="[ Palais Royal ]") or discord.utils.get(interaction.guild.roles, name="Palais Royal")
         salon_cible = interaction.guild.get_channel(SALON_PALAIS_ROYAL_ID)
         
-        mention_role = role_palais.mention if role_palais else "@Palais Royal"
+        mention_role = role_palais.mention if role_palais else "@[ Palais Royal ]"
         
         if salon_cible:
             try:
@@ -389,13 +389,13 @@ class VueBoutonTicket(discord.ui.View):
         
         if g_id in missions_actives and joueur.id in missions_actives[g_id]:
             await interaction.response.send_message("Vous avez déjà une mission active sur ce serveur !", ephemeral=True)
-            await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Tentative ticket refusée (déjà une mission active) pour {joueur.name} sur {guild.name}")
+            await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Tentative ticket refusée (déjà une mission active) pour {joueur.name} sur {interaction.guild.name}")
             return
 
         await interaction.response.defer(ephemeral=True)
 
         role_instructeur = discord.utils.get(guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]")
-        role_palais = discord.utils.get(guild.roles, name="Palais Royal")
+        role_palais = discord.utils.get(guild.roles, name="[ Palais Royal ]") or discord.utils.get(guild.roles, name="Palais Royal")
 
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
@@ -418,7 +418,7 @@ class VueBoutonTicket(discord.ui.View):
         
         asyncio.create_task(gerer_expiration_automatique(guild, ticket_channel.id, joueur.id))
         await interaction.followup.send(f"✅ Ton ticket a été créé ici : {ticket_channel.mention}", ephemeral=True)
-        await envoyer_log_proprietaire(bot, f"LOG ABSOLU - OUVERTURE TICKET : Salon {ticket_channel.name} créé pour {joueur.name} sur {guild.name}")
+        await envoyer_log_proprietaire(bot, f"LOG ABSOLU - OUVERTURE TICKET : Salon {ticket_channel.name} créé pour {joueur.name} sur {interaction.guild.name}")
 
 class VueChoixDifficulte(discord.ui.View):
     def __init__(self, joueur_id):
@@ -509,7 +509,7 @@ class VueGestionJoueurMission(discord.ui.View):
         await interaction.response.edit_message(view=self)
 
         role_instructeur = discord.utils.get(interaction.guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]")
-        mention_ins = role_instructeur.mention if role_instructeur else '@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚𝔯 ]'
+        mention_ins = role_instructeur.mention if role_instructeur else '@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]'
 
         await interaction.channel.set_permissions(interaction.user, read_messages=True, send_messages=False)
         await interaction.channel.send(f"💬 {interaction.user.mention}, un instructeur a été notifié. Votre demande va être traitée dans les plus brefs délais.")
@@ -1032,8 +1032,8 @@ async def openticket(interaction: discord.Interaction, joueur: discord.Member):
 
     await interaction.response.defer(ephemeral=True)
 
-    role_instructeur = discord.utils.get(guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚𝔯 ]")
-    role_palais = discord.utils.get(guild.roles, name="Palais Royal")
+    role_instructeur = discord.utils.get(guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]")
+    role_palais = discord.utils.get(guild.roles, name="[ Palais Royal ]") or discord.utils.get(guild.roles, name="Palais Royal")
 
     overwrites = {
         guild.default_role: discord.PermissionOverwrite(read_messages=False),
