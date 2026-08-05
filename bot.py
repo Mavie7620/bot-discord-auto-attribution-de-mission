@@ -162,6 +162,21 @@ class VueFermerTicket(discord.ui.View):
         try: await interaction.channel.delete()
         except: pass
 
+class VueButinRecupere(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="📦 Butin récupéré", style=discord.ButtonStyle.primary, custom_id="btn_butin_recupere")
+    async def butin_recupere(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Clic bouton Butin récupéré par {interaction.user.name} dans {interaction.channel.name} ({interaction.guild.name})")
+        for child in self.children:
+            child.disabled = True
+        try:
+            await interaction.response.edit_message(view=self)
+        except:
+            pass
+        await interaction.channel.send("✅ **Le butin a été récupéré avec succès par l'instructeur.**", view=VueFermerTicket())
+
 async def action_accepter_mission(joueur_id, channel):
     guild = channel.guild
     g_id = guild.id
@@ -174,8 +189,8 @@ async def action_accepter_mission(joueur_id, channel):
         sauvegarder_profils(g_id, profils)
         del missions_actives[g_id][joueur_id]
         
-        msg = "✅ **Mission Validée** ! L'objectif est consigné comme réussi dans le grand registre."
-        await channel.send(msg, view=VueFermerTicket())
+        msg = "✅ **Mission Validée** ! L'objectif est consigné comme réussi dans le grand registre.\n\n🚚 **Un instructeur vas venir récupéré le butin.**"
+        await channel.send(msg, view=VueButinRecupere())
         await envoyer_double_notification(guild, msg, f"✅ **Mission accomplie** par <@{joueur_id}> : *\"{m_info['texte']}\"*", joueur_id=joueur_id)
         await envoyer_log_proprietaire(bot, f"LOG ABSOLU - ACTION ACCEPTER MISSION : Joueur {joueur_id} validé sur {guild.name}")
         return True
@@ -834,6 +849,7 @@ async def on_ready():
     if not verifier_temps_missions.is_running(): verifier_temps_missions.start()
     bot.add_view(VueBoutonTicket())
     bot.add_view(VueFermerTicket())
+    bot.add_view(VueButinRecupere())
     try:
         synced = await bot.tree.sync()
         print(f"Bot Valerius Pro — {len(synced)} Commandes Slash synchronisées !")
