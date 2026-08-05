@@ -1273,7 +1273,7 @@ async def total_backup(interaction: discord.Interaction):
     timestamp_sauvegarde = datetime.now().strftime("%Y-%m-%d_%H-%M")
     fichier_discord = discord.File(buffer, filename=f"total_backup_valerius_{timestamp_sauvegarde}.json")
     
-    await interaction.followup.send("📦 **Voici ta sauvegarde complète !** Garde ce fichier précieusement sur ton PC avant de faire ta mise à jour.", file=fichier_discord, ephemeral=True)
+    await interaction.followup.send("📦 **Voici ta sauvegarde complète !** Les salons, les missions en cours et les profils sont inclus.", file=fichier_discord, ephemeral=True)
     await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Sauvegarde totale générée avec succès sur {interaction.guild.name}.")
 
 @bot.tree.command(name="total_restore", description="Restaure toutes les données à partir d'un fichier de backup.")
@@ -1302,8 +1302,18 @@ async def total_restore(interaction: discord.Interaction, fichier: discord.Attac
         for str_g_id, j_dict in m_actives_sauvegardees.items():
             g_id = int(str_g_id)
             missions_actives[g_id] = {}
+            guild_obj = bot.get_guild(g_id)
+            
             for str_j_id, m_data in j_dict.items():
                 j_id = int(str_j_id)
+                
+                old_channel_id = m_data["channel_id"]
+                target_channel = bot.get_channel(old_channel_id)
+                if not target_channel and guild_obj:
+                    target_channel = interaction.channel
+                
+                final_channel_id = target_channel.id if target_channel else old_channel_id
+
                 missions_actives[g_id][j_id] = {
                     "texte": m_data["texte"],
                     "delai_texte": m_data["delai_texte"],
@@ -1311,13 +1321,13 @@ async def total_restore(interaction: discord.Interaction, fichier: discord.Attac
                     "date_fin": datetime.fromisoformat(m_data["date_fin"]),
                     "duree_totale": timedelta(seconds=m_data["duree_totale_seconds"]),
                     "cat": m_data["cat"],
-                    "channel_id": m_data["channel_id"],
+                    "channel_id": final_channel_id,
                     "alerte_moitie": m_data["alerte_moitie"],
                     "alerte_un_quart": m_data["alerte_un_quart"],
                     "en_attente": m_data["en_attente"]
                 }
 
-        await interaction.followup.send("✅ **Restauration réussie !** Toutes les données, profils et missions en cours ont été réinjectés avec succès.", ephemeral=True)
+        await interaction.followup.send("✅ **Restauration réussie !** Les salons et les missions en cours ont été réassociés avec succès.", ephemeral=True)
         await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Restauration totale effectuée avec succès sur {interaction.guild.name}.")
     except Exception as e:
         await interaction.followup.send(f"❌ Erreur lors de la restauration du fichier : {e}", ephemeral=True)
