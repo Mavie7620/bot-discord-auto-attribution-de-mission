@@ -26,7 +26,8 @@ intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 PROPRIETAIRE_LOGS_NOM = "MAVIE7620"
-WELCOME_CHANNEL_ID = 1534600324546039829
+WELCOME_CHANNEL_ID = 1534604841660190792
+ATTENTE_MOOV_ID = 1534604587992875280
 
 def get_file_name(guild_id):
     return f"valerius_missions_{guild_id}.txt"
@@ -109,7 +110,7 @@ def extraire_duree(delai_texte):
 missions_actives = {}
 
 TEXTE_ECHEC = (
-    "⚜️ **𝕾𝖞𝖘𝖙𝖊̀𝖒𝖊 𝖉𝖊 𝕸𝖎𝖘𝖘𝖎𝖔𝖓𝖘 𝖉𝖊 𝖁𝖆𝖑𝖊𝖗𝖎𝖚𝖘** ⚜️\n"
+    "⚜️ **𝕾𝖞𝖘𝖙𝖊̀𝖒𝖊 𝖉𝖊 𝕸𝖎𝖘𝖘𝖎𝖔𝖓𝖘 𝖉𝖊 𝕁𝖆𝖑𝖊𝖗𝖎𝖚𝖘** ⚜️\n"
     "**D'après l'article Ⅴ — Rappel :**\n"
     "- **Refuser ou abandonner une mission attribuée sans raison valable peut être sanctionné.**\n"
     "- *L'État récompense l'investissement et la persévérance.*\n"
@@ -203,7 +204,7 @@ class VueAccueilArrivant(discord.ui.View):
     @discord.ui.button(label="⚔️ Je souhaite etre recruter", style=discord.ButtonStyle.success, custom_id="btn_recrutement")
     async def recrutement_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         role_recrutement = discord.utils.get(interaction.guild.roles, name="en cours de recrutement")
-        salon_attente = discord.utils.get(interaction.guild.text_channels, name="attente-moov") or discord.utils.get(interaction.guild.text_channels, name="attente moov")
+        salon_attente = interaction.guild.get_channel(ATTENTE_MOOV_ID) or discord.utils.get(interaction.guild.text_channels, name="attente-moov")
         
         if not role_recrutement:
             await interaction.response.send_message("❌ Le rôle `en cours de recrutement` est introuvable sur ce serveur.", ephemeral=True)
@@ -212,12 +213,11 @@ class VueAccueilArrivant(discord.ui.View):
         try:
             await interaction.user.add_roles(role_recrutement)
             
-            # Gestion des permissions pour le salon attente moov
             if salon_attente:
                 await salon_attente.set_permissions(interaction.user, read_messages=True, send_messages=True, connect=True)
                 await interaction.response.send_message(f"✅ Tu as obtenu le rôle **en cours de recrutement** et l'accès au salon {salon_attente.mention} !", ephemeral=True)
             else:
-                await interaction.response.send_message("✅ Rôle attribué, mais le salon `attente moov` est introuvable.", ephemeral=True)
+                await interaction.response.send_message("✅ Rôle attribué, mais le salon `attente moov` est introuvable avec cet ID.", ephemeral=True)
         except Exception as e:
             await interaction.response.send_message(f"❌ Une erreur est survenue : {e}", ephemeral=True)
 
@@ -378,7 +378,7 @@ class VueBoutonTicket(discord.ui.View):
         
         if g_id in missions_actives and joueur.id in missions_actives[g_id]:
             await interaction.response.send_message("Vous avez déjà une mission active sur ce serveur !", ephemeral=True)
-            await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Tentative ticket refusée (déjà une mission active) pour {joueur.name} sur {guild.name}")
+            await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Tentative ticket refusée (déjà une mission active) pour {joueur.name} sur {interaction.guild.name}")
             return
 
         await interaction.response.defer(ephemeral=True)
@@ -896,21 +896,19 @@ async def on_ready():
     bot.add_view(VueButinRecupere())
     bot.add_view(VueAccueilArrivant())
     
-    # Envoi automatique du panneau d'accueil dans le salon spécifié s'il n'y est pas déjà
     salon_accueil = bot.get_channel(WELCOME_CHANNEL_ID)
     if salon_accueil:
         try:
-            # Vérifie si le message existe déjà pour éviter le spam à chaque redémarrage
             async for msg in salon_accueil.history(limit=10):
-                if msg.author == bot.user and "Bienvenue sur Valerius" in msg.content:
+                if msg.author == bot.user and "Bienvenue" in msg.content:
                     break
             else:
                 embed_accueil = discord.Embed(
-                    title="⚜️ BIENVENUE SUR VALERIUS ⚜️",
+                    title="⚜️ BIENVENUE ⚜️",
                     description="Veuillez sélectionner ci-dessous votre statut ou votre intention en arrivant sur le serveur :",
                     color=discord.Color.gold()
                 )
-                await salon_accueil.send(content="Bienvenue sur Valerius", embed=embed_accueil, view=VueAccueilArrivant())
+                await salon_accueil.send(content="Bienvenue", embed=embed_accueil, view=VueAccueilArrivant())
         except Exception as e:
             print(f"Erreur envoi panneau d'accueil automatique : {e}")
 
@@ -1186,13 +1184,11 @@ async def import_actives(interaction: discord.Interaction, fichier: discord.Atta
         contenu_bytes = await fichier.read()
         donnees = json.loads(contenu_bytes.decode("utf-8"))
         
-        # Sécurité : si on importe un backup global qui contient une clé "missions_actives"
         if "missions_actives" in donnees:
             donnees = donnees["missions_actives"].get(str(guild_id), {})
 
         nb_restaurees = 0
         for str_j_id, m_data in donnees.items():
-            # Sécurité majeure : ignore les clés textuelles parasites
             if not str_j_id.isdigit():
                 continue
                 
