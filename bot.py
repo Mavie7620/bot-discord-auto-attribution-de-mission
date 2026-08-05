@@ -28,6 +28,7 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 PROPRIETAIRE_LOGS_NOM = "MAVIE7620"
 WELCOME_CHANNEL_ID = 1534604841660190792
 ATTENTE_MOOV_ID = 1534604587992875280
+SALON_PALAIS_ROYAL_ID = 1519322938430722129
 
 def get_file_name(guild_id):
     return f"valerius_missions_{guild_id}.txt"
@@ -185,21 +186,31 @@ class VueAccueilArrivant(discord.ui.View):
 
     @discord.ui.button(label="👑 Je suis greyjoy", style=discord.ButtonStyle.danger, custom_id="btn_greyjoy")
     async def greyjoy_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        role_haut_grade = discord.utils.get(interaction.guild.roles, name="greyjoy") or discord.utils.get(interaction.guild.roles, name="Greyjoy")
-        mention_role = role_haut_grade.mention if role_haut_grade else "@greyjoy"
-        await interaction.response.send_message(f"🚨 Un haut gradé a été ping : {mention_role} ! Un membre s'identifie en tant que Greyjoy.", ephemeral=True)
+        role_palais = discord.utils.get(interaction.guild.roles, name="Palais Royal") or discord.utils.get(interaction.guild.roles, name="palais royal")
+        salon_cible = interaction.guild.get_channel(SALON_PALAIS_ROYAL_ID)
+        
+        mention_role = role_palais.mention if role_palais else "@Palais Royal"
+        
+        if salon_cible:
+            try:
+                await salon_cible.send(f"🚨 {mention_role} ! Un membre s'identifie en tant que Greyjoy.")
+                await interaction.response.send_message(f"✅ Un haut gradé a été prévenu dans le salon {salon_cible.mention} !", ephemeral=True)
+            except Exception as e:
+                await interaction.response.send_message(f"❌ Erreur lors de l'envoi du message dans le salon dédié : {e}", ephemeral=True)
+        else:
+            await interaction.response.send_message(f"🚨 Un haut gradé a été ping : {mention_role} ! Un membre s'identifie en tant que Greyjoy. (Salon cible introuvable par ID)", ephemeral=True)
 
     @discord.ui.button(label="👤 Je suis un visiteurs", style=discord.ButtonStyle.secondary, custom_id="btn_visiteur")
     async def visiteur_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        role_etranger = discord.utils.get(interaction.guild.roles, name="etranger") or discord.utils.get(interaction.guild.roles, name="Étranger")
+        role_etranger = discord.utils.get(interaction.guild.roles, name="[💥] Etranger [💥]") or discord.utils.get(interaction.guild.roles, name="etranger")
         if role_etranger:
             try:
                 await interaction.user.add_roles(role_etranger)
-                await interaction.response.send_message("✅ Rôle **Étranger** attribué avec succès !", ephemeral=True)
+                await interaction.response.send_message(f"✅ Rôle **{role_etranger.name}** attribué avec succès !", ephemeral=True)
             except Exception as e:
                 await interaction.response.send_message(f"❌ Erreur lors de l'attribution du rôle : {e}", ephemeral=True)
         else:
-            await interaction.response.send_message("❌ Le rôle `etranger` est introuvable sur ce serveur. Contactez un admin.", ephemeral=True)
+            await interaction.response.send_message("❌ Le rôle `[💥] Etranger [💥]` est introuvable sur ce serveur. Contactez un admin.", ephemeral=True)
 
     @discord.ui.button(label="⚔️ Je souhaite etre recruter", style=discord.ButtonStyle.success, custom_id="btn_recrutement")
     async def recrutement_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -269,8 +280,8 @@ async def action_demander_preuve(joueur_id, channel, guild):
         if member:
             await channel.set_permissions(member, read_messages=True, send_messages=True)
             
-        role_instructeur = discord.utils.get(guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚𝔯 ]")
-        mention_ins = role_instructeur.mention if role_instructeur else "@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚𝔯 ]"
+        role_instructeur = discord.utils.get(guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]")
+        mention_ins = role_instructeur.mention if role_instructeur else "@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]"
         
         msg_ticket = f"⚠️ <@{joueur_id}>, **{mention_ins} veuillez nous fournir une preuve de l'accomplissement de votre mission.**"
         msg_log_missions = f"📸 {mention_ins} — Une demande de preuve a été envoyée à <@{joueur_id}> dans son ticket {channel.mention}.\nMerci de valider ou refuser ci-dessous une fois la preuve examinée :"
@@ -339,8 +350,8 @@ async def verifier_temps_missions():
                 ajouter_historique(joueur_id, profils, m_info["texte"], "Échec")
                 sauvegarder_profils(guild_id, profils)
 
-                role_instructeur = discord.utils.get(guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚𝔯 ]")
-                mention_ins = role_instructeur.mention if role_instructeur else '@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚𝔯 ]'
+                role_instructeur = discord.utils.get(guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]")
+                mention_ins = role_instructeur.mention if role_instructeur else '@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]'
                 
                 msg_echec = (
                     f"🚨 **MISSION ÉCHOUÉE** 🚨\nLe temps imparti est écoulé ! La mission de <@{joueur_id}> a échoué.\n"
@@ -378,12 +389,12 @@ class VueBoutonTicket(discord.ui.View):
         
         if g_id in missions_actives and joueur.id in missions_actives[g_id]:
             await interaction.response.send_message("Vous avez déjà une mission active sur ce serveur !", ephemeral=True)
-            await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Tentative ticket refusée (déjà une mission active) pour {joueur.name} sur {interaction.guild.name}")
+            await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Tentative ticket refusée (déjà une mission active) pour {joueur.name} sur {guild.name}")
             return
 
         await interaction.response.defer(ephemeral=True)
 
-        role_instructeur = discord.utils.get(guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚𝔯 ]")
+        role_instructeur = discord.utils.get(guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]")
         role_palais = discord.utils.get(guild.roles, name="Palais Royal")
 
         overwrites = {
@@ -497,7 +508,7 @@ class VueGestionJoueurMission(discord.ui.View):
         for child in self.children: child.disabled = True
         await interaction.response.edit_message(view=self)
 
-        role_instructeur = discord.utils.get(interaction.guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚𝔯 ]")
+        role_instructeur = discord.utils.get(interaction.guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]")
         mention_ins = role_instructeur.mention if role_instructeur else '@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚𝔯 ]'
 
         await interaction.channel.set_permissions(interaction.user, read_messages=True, send_messages=False)
@@ -1332,8 +1343,8 @@ async def missionaccomplie(interaction: discord.Interaction):
     await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /missionaccomplie exécutée par {interaction.user.name} sur {interaction.guild.name}")
     joueur = interaction.user
     g_id = interaction.guild.id
-    role_instructeur = discord.utils.get(interaction.guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚𝔯 ]")
-    mention_ins = role_instructeur.mention if role_instructeur else '@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚𝔯 ]'
+    role_instructeur = discord.utils.get(interaction.guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]")
+    mention_ins = role_instructeur.mention if role_instructeur else '@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]'
     
     if g_id in missions_actives and joueur.id in missions_actives[g_id]:
         m_info = missions_actives[g_id][joueur.id]
