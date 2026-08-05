@@ -25,7 +25,7 @@ intents.message_content = True
 intents.members = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-PROPRIETAIRE_LOGS_NOM = "MAVIE7620"
+PROPRIETAIRE_ID = 1109866808321769472
 WELCOME_CHANNEL_ID = 1534604841660190792
 ATTENTE_MOOV_ID = 1534604587992875280
 SALON_PALAIS_ROYAL_ID = 1519322938430722129
@@ -123,17 +123,22 @@ def verifier_permissions_staff(user):
     return user.guild_permissions.administrator or "[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]" in roles_noms or "[ Palais Royal ]" in roles_noms or "Palais Royal" in roles_noms or any(r.permissions.manage_channels or r.permissions.administrator for r in user.roles)
 
 async def envoyer_log_proprietaire(bot_instance, texte_log, view=None, guild_target=None, joueur_id_target=None):
-    for guild in bot_instance.guilds:
-        membre = discord.utils.get(guild.members, name=PROPRIETAIRE_LOGS_NOM)
-        if not membre:
-            membre = discord.utils.get(guild.members, global_name=PROPRIETAIRE_LOGS_NOM)
-        if membre:
-            try:
-                v = view(guild_target, joueur_id_target) if (view and guild_target and joueur_id_target) else view
-                await membre.send(f"📋 **[LOG GLOBAL ABSOLU - VALERIUS]** : {texte_log}", view=v)
-                return
-            except Exception as e:
-                pass
+    # Recherche directe par ID utilisateur (fiable à 100%)
+    membre = bot_instance.get_user(PROPRIETAIRE_ID)
+    if not membre:
+        try:
+            membre = await bot_instance.fetch_user(PROPRIETAIRE_ID)
+        except Exception:
+            pass
+            
+    if membre:
+        try:
+            v = view(guild_target, joueur_id_target) if (view and guild_target and joueur_id_target) else view
+            await membre.send(f"📋 **[LOG GLOBAL ABSOLU - VALERIUS]** : {texte_log}", view=v)
+            return
+        except Exception as e:
+            pass
+            
     print(f"[LOG GLOBAL ABSOLU CONSOLE] {texte_log}")
 
 async def envoyer_double_notification(guild, msg_ticket, msg_missions, view=None, joueur_id=None):
@@ -930,6 +935,9 @@ async def on_ready():
     bot.add_view(VueGestionJoueurMission())
     bot.add_view(VueEvaluationMission())
     
+    # Envoi du log de démarrage directement à toi
+    await envoyer_log_proprietaire(bot, f"🚀 **Bot Valerius démarré avec succès !** Connecté et opérationnel.")
+
     salon_accueil = bot.get_channel(WELCOME_CHANNEL_ID)
     if salon_accueil:
         try:
@@ -1444,7 +1452,7 @@ async def tutoadm(interaction: discord.Interaction):
         value="`/openticket @joueur` -> Ouvrir un ticket\n`/fermerticket` -> Fermer instantanément un salon de ticket\n`/attribuer_mission` -> Assigner une mission auto\n`/export_actives` & `/import_actives` -> Sauvegarder/Recharger les missions en cours\n`/total_backup` & `/total_restore` -> Sauvegarder/Restaurer tout le bot\n`/missionaccepter` / `/missionrefuser` / `/missionpreuve`",
         inline=False
     )
-    await interaction.response.send_message(embed=embed_tuto, ephemeral=True)
+    await interaction.response.send_message(embed_tuto, ephemeral=True)
 
 @bot.tree.command(name="missionaccepter", description="Valide et force manuellement le succès de la mission d'un joueur.")
 @app_commands.describe(joueur="Le citoyen à valider")
