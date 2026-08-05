@@ -232,6 +232,234 @@ class VueAccueilArrivant(discord.ui.View):
         except Exception as e:
             await interaction.response.send_message(f"❌ Une erreur est survenue : {e}", ephemeral=True)
 
+class VueGestionJoueurMission(discord.ui.View):
+    def __init__(self, joueur_id=None):
+        super().__init__(timeout=None)
+        self.joueur_id = joueur_id
+
+    @discord.ui.button(label="🏁 Finir la mission", style=discord.ButtonStyle.success, custom_id="joueur_finir_mission")
+    async def joueur_finir(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Récupération dynamique du joueur si relancé après redémarrage
+        g_id = interaction.guild.id
+        current_joueur_id = self.joueur_id
+        if not current_joueur_id and g_id in missions_actives:
+            for j_id, m_info in missions_actives[g_id].items():
+                if m_info.get("channel_id") == interaction.channel.id:
+                    current_joueur_id = j_id
+                    break
+
+        if current_joueur_id and interaction.user.id != current_joueur_id and not verifier_permissions_staff(interaction.user):
+            await interaction.response.send_message("❌ Cet objectif ne t'appartient pas.", ephemeral=True)
+            return
+
+        target_id = current_joueur_id if current_joueur_id else interaction.user.id
+        if g_id not in missions_actives or target_id not in missions_actives[g_id]:
+            await interaction.response.send_message("❌ Tu n'as aucune mission active sur ce serveur.", ephemeral=True)
+            return
+
+        m_info = missions_actives[g_id][target_id]
+        if not m_info.get("en_attente", False):
+            m_info["en_attente"] = True
+            m_info["moment_gel"] = datetime.now()
+
+        for child in self.children: child.disabled = True
+        try:
+            await interaction.response.edit_message(view=self)
+        except:
+            await interaction.response.defer(ephemeral=True)
+
+        role_instructeur = discord.utils.get(interaction.guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]")
+        mention_ins = role_instructeur.mention if role_instructeur else '@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]'
+
+        member_obj = interaction.guild.get_member(target_id)
+        if member_obj:
+            await interaction.channel.set_permissions(member_obj, read_messages=True, send_messages=False)
+        
+        await interaction.channel.send(f"💬 <@{target_id>>, un instructeur a été notifié. Votre demande va être traitée dans les plus brefs délais.")
+        
+        msg_fin = (
+            f"📢 {mention_ins} ! <@{target_id}> déclare avoir fini sa mission via l'interface : *\"{m_info['texte']}\"* !\n"
+            f"⏱️ **Le chrono est mis en pause.** Choisissez l'action appropriée :"
+        )
+        await envoyer_double_notification(interaction.guild, msg_fin, f"📢 {mention_ins} — <@{target_id}> demande une validation pour : *\"{m_info['texte']}\"* dans {interaction.channel.mention}", view=VueEvaluationMission, joueur_id=target_id)
+        await envoyer_log_proprietaire(bot, f"LOG ABSOLU - JOUEUR FINIR : {interaction.user.name} a cliqué Finir la mission sur {interaction.guild.name}")
+
+    @discord.ui.button(label="❌ Abandonner", style=discord.ButtonStyle.danger, custom_id="joueur_abandonner_mission")
+    async def joueur_abandonner(self, interaction: discord.Interaction, button: discord.ui.Button):
+        g_id = interaction.guild.id
+        current_joueur_id = self.joueur_id
+        if not current_joueur_id and g_id in missions_actives:
+            for j_id, m_info in missions_actives[g_id].items():
+                if m_info.get("channel_id") == interaction.channel.id:
+                    current_joueur_id = j_id
+                    break
+
+        target_id = current_joueur_id if current_joueur_id else interaction.user.id
+        if current_joueur_id and interaction.user.id != current_joueur_id and not verifier_permissions_staff(interaction.user):
+            await interaction.response.send_message("❌ Tu ne peux pas abandonner la mission de quelqu'un d'autre.", ephemeral=True)
+            return
+
+        if g_id not in missions_actives or target_id not in missions_actives[g_id]:
+            await interaction.response.send_message("❌ Tu n'as pas de mission active à abandonner sur ce serveur.", ephemeral=True)
+            return
+
+        for child in self.children: child.disabled = True
+        try:
+            await interaction.response.edit_message(view=self)
+        except:
+            await interaction.response.defer(ephemeral=True)
+            
+        await action_refuser_mission(target_id, interaction.channel)
+        await envoyer_log_proprietaire(bot, f"LOG ABSOLU - JOUEUR ABANDONNER : {interaction.user.name} a abandonné sa mission sur {interaction.guild.name}")
+
+class VueEvaluationMission(discord.ui.View):
+    def __init__(self, joueur_id=None):
+        super().__init__(timeout=None)
+        self.joueur_id = joueur_id
+
+    @discord.ui.button(label="✅ Accepter", style=discord.ButtonStyle.success, custom_id="eval_accepter")
+    async def eval_accepter(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not verifier_permissions_staff(interaction.user):
+            await interaction.response.send_message("❌ Tu n'as pas l'autorité nécessaire pour évaluer cet ordre.", ephemeral=True)
+            return
+        
+        for child in self.children: child.disabled = True
+        try: await interaction.response.edit_message(view=self)
+        except: pass
+        
+        target_j_id = self.joueur_id
+        g_id = interaction.guild.id
+        if not target_j_id and g_id in missions_actives:
+            for j_id, m_info in missions_actives[g_id].items():
+                if m_info.get("channel_id") == interaction.channel.id:
+                    target_j_id = j_id
+                    break
+
+        chan_cible = interaction.channel
+        if target_j_id and g_id in missions_actives and target_j_id in missions_actives[g_id]:
+            c = bot.get_channel(missions_actives[g_id][target_j_id]["channel_id"])
+            if c: chan_cible = c
+
+        if target_j_id:
+            await action_accepter_mission(target_j_id, chan_cible)
+        else:
+            await interaction.followup.send("❌ Impossible de lier cette évaluation à un joueur actif.", ephemeral=True)
+
+    @discord.ui.button(label="❌ Refuser", style=discord.ButtonStyle.danger, custom_id="eval_refuser")
+    async def eval_refuser(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not verifier_permissions_staff(interaction.user):
+            await interaction.response.send_message("❌ Tu n'as pas l'autorité nécessaire pour évaluer cet ordre.", ephemeral=True)
+            return
+        
+        for child in self.children: child.disabled = True
+        try: await interaction.response.edit_message(view=self)
+        except: pass
+        
+        target_j_id = self.joueur_id
+        g_id = interaction.guild.id
+        if not target_j_id and g_id in missions_actives:
+            for j_id, m_info in missions_actives[g_id].items():
+                if m_info.get("channel_id") == interaction.channel.id:
+                    target_j_id = j_id
+                    break
+
+        chan_cible = interaction.channel
+        if target_j_id and g_id in missions_actives and target_j_id in missions_actives[g_id]:
+            c = bot.get_channel(missions_actives[g_id][target_j_id]["channel_id"])
+            if c: chan_cible = c
+
+        if target_j_id:
+            await action_refuser_mission(target_j_id, chan_cible)
+        else:
+            await interaction.followup.send("❌ Impossible de lier cette évaluation à un joueur actif.", ephemeral=True)
+
+    @discord.ui.button(label="📸 Demander des preuves", style=discord.ButtonStyle.primary, custom_id="eval_preuve")
+    async def eval_preuve(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not verifier_permissions_staff(interaction.user):
+            await interaction.response.send_message("❌ Tu n'as pas l'autorité nécessaire.", ephemeral=True)
+            return
+
+        for child in self.children: child.disabled = True
+        try: await interaction.response.edit_message(view=self)
+        except: pass
+        
+        target_j_id = self.joueur_id
+        target_guild = interaction.guild
+        g_id = interaction.guild.id
+        if not target_j_id and g_id in missions_actives:
+            for j_id, m_info in missions_actives[g_id].items():
+                if m_info.get("channel_id") == interaction.channel.id:
+                    target_j_id = j_id
+                    break
+
+        chan_cible = interaction.channel
+        if target_j_id and g_id in missions_actives and target_j_id in missions_actives[g_id]:
+            c = bot.get_channel(missions_actives[g_id][target_j_id]["channel_id"])
+            if c: chan_cible = c
+
+        if target_j_id:
+            await action_demander_preuve(target_j_id, chan_cible, target_guild)
+        else:
+            await interaction.followup.send("❌ Impossible de lier cette demande à un joueur actif.", ephemeral=True)
+
+class VueEvaluationMissionMP(discord.ui.View):
+    def __init__(self, guild_target, joueur_id):
+        super().__init__(timeout=None)
+        self.guild_target = guild_target
+        self.joueur_id = joueur_id
+
+    @discord.ui.button(label="✅ Accepter (MP)", style=discord.ButtonStyle.success, custom_id="eval_mp_accepter")
+    async def eval_mp_accepter(self, interaction: discord.Interaction, button: discord.ui.Button):
+        for child in self.children: child.disabled = True
+        try: await interaction.response.edit_message(view=self)
+        except: pass
+
+        chan_cible = None
+        if self.guild_target and self.guild_target.id in missions_actives and self.joueur_id in missions_actives[self.guild_target.id]:
+            chan_cible = bot.get_channel(missions_actives[self.guild_target.id][self.joueur_id]["channel_id"])
+        if not chan_cible and self.guild_target:
+            chan_cible = discord.utils.get(self.guild_target.text_channels, name="validation-mission")
+        
+        if chan_cible:
+            await action_accepter_mission(self.joueur_id, chan_cible)
+            await interaction.followup.send("✅ Mission acceptée avec succès depuis les logs !", ephemeral=True)
+        else:
+            await interaction.followup.send("❌ Salon introuvable pour cette mission.", ephemeral=True)
+
+    @discord.ui.button(label="❌ Refuser (MP)", style=discord.ButtonStyle.danger, custom_id="eval_mp_refuser")
+    async def eval_mp_refuser(self, interaction: discord.Interaction, button: discord.ui.Button):
+        for child in self.children: child.disabled = True
+        try: await interaction.response.edit_message(view=self)
+        except: pass
+
+        chan_cible = None
+        if self.guild_target and self.guild_target.id in missions_actives and self.joueur_id in missions_actives[self.guild_target.id]:
+            chan_cible = bot.get_channel(missions_actives[self.guild_target.id][self.joueur_id]["channel_id"])
+        if not chan_cible and self.guild_target:
+            chan_cible = discord.utils.get(self.guild_target.text_channels, name="validation-mission")
+        
+        if chan_cible:
+            await action_refuser_mission(self.joueur_id, chan_cible)
+            await interaction.followup.send("❌ Mission refusée depuis les logs.", ephemeral=True)
+        else:
+            await interaction.followup.send("❌ Salon introuvable pour cette mission.", ephemeral=True)
+
+    @discord.ui.button(label="📸 Preuve (MP)", style=discord.ButtonStyle.primary, custom_id="eval_mp_preuve")
+    async def eval_mp_preuve(self, interaction: discord.Interaction, button: discord.ui.Button):
+        for child in self.children: child.disabled = True
+        try: await interaction.response.edit_message(view=self)
+        except: pass
+
+        chan_cible = None
+        if self.guild_target and self.guild_target.id in missions_actives and self.joueur_id in missions_actives[self.guild_target.id]:
+            chan_cible = bot.get_channel(missions_actives[self.guild_target.id][self.joueur_id]["channel_id"])
+        
+        if chan_cible and self.guild_target:
+            await action_demander_preuve(self.joueur_id, chan_cible, self.guild_target)
+            await interaction.followup.send("📸 Demande de preuve transmise depuis les logs.", ephemeral=True)
+        else:
+            await interaction.followup.send("❌ Salon introuvable pour cette mission.", ephemeral=True)
+
 async def action_accepter_mission(joueur_id, channel):
     guild = channel.guild
     g_id = guild.id
@@ -287,7 +515,7 @@ async def action_demander_preuve(joueur_id, channel, guild):
         msg_log_missions = f"📸 {mention_ins} — Une demande de preuve a été envoyée à <@{joueur_id}> dans son ticket {channel.mention}.\nMerci de valider ou refuser ci-dessous une fois la preuve examinée :"
         
         await channel.send(msg_ticket)
-        await envoyer_double_notification(guild, msg_ticket, msg_log_missions, view=VueEvaluationMission, joueur_id=joueur_id)
+        await envoyer_double_notification(guild, msg_ticket, msg_log_missions, view=VueEvaluationMission(joueur_id), joueur_id=joueur_id)
         await envoyer_log_proprietaire(bot, f"LOG ABSOLU - ACTION PREUVE : Demandée pour le joueur {joueur_id} sur {guild.name}")
         return True
     return False
@@ -377,50 +605,6 @@ async def verifier_temps_missions():
             if joueur_id in missions_actives[guild_id]: 
                 del missions_actives[guild_id][joueur_id]
 
-class VueBoutonTicket(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="🎫 Ouvrir un Ticket de Mission", style=discord.ButtonStyle.green, custom_id="btn_ouvrir_ticket")
-    async def ouvrir_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        guild = interaction.guild
-        joueur = interaction.user
-        g_id = guild.id
-        
-        if g_id in missions_actives and joueur.id in missions_actives[g_id]:
-            await interaction.response.send_message("Vous avez déjà une mission active sur ce serveur !", ephemeral=True)
-            await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Tentative ticket refusée (déjà une mission active) pour {joueur.name} sur {interaction.guild.name}")
-            return
-
-        await interaction.response.defer(ephemeral=True)
-
-        role_instructeur = discord.utils.get(guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]")
-        role_palais = discord.utils.get(guild.roles, name="[ Palais Royal ]") or discord.utils.get(guild.roles, name="Palais Royal")
-
-        # Configuration des permissions : Seul le joueur, les rôles staff/instructeur/palais royal et le bot voient le salon
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(read_messages=False),
-            joueur: discord.PermissionOverwrite(read_messages=True, send_messages=True, view_channel=True),
-            guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, view_channel=True)
-        }
-        
-        if role_instructeur: overwrites[role_instructeur] = discord.PermissionOverwrite(read_messages=True, send_messages=True, view_channel=True)
-        if role_palais: overwrites[role_palais] = discord.PermissionOverwrite(read_messages=True, send_messages=True, view_channel=True)
-
-        nom_salon = f"🪖-ordre-{joueur.name}"
-        ticket_channel = await guild.create_text_channel(name=nom_salon, overwrites=overwrites, category=interaction.channel.category if interaction.channel.category else None)
-
-        embed_ticket = discord.Embed(
-            title="⚜️ CENTRE DE SÉLECTION DES DÉCRETS ⚜️",
-            description=f"Bienvenue {joueur.mention}.\nChoisis la difficulté de l'objectif que tu souhaites accomplir aujourd'hui pour Valerius.",
-            color=discord.Color.dark_red()
-        )
-        await ticket_channel.send(embed=embed_ticket, view=VueChoixDifficulte(joueur.id))
-        
-        asyncio.create_task(gerer_expiration_automatique(guild, ticket_channel.id, joueur.id))
-        await interaction.followup.send(f"✅ Ton ticket a été créé ici : {ticket_channel.mention}", ephemeral=True)
-        await envoyer_log_proprietaire(bot, f"LOG ABSOLU - OUVERTURE TICKET : Salon {ticket_channel.name} créé pour {joueur.name} sur {interaction.guild.name}")
-
 class VueChoixDifficulte(discord.ui.View):
     def __init__(self, joueur_id):
         super().__init__(timeout=600)
@@ -429,7 +613,6 @@ class VueChoixDifficulte(discord.ui.View):
     async def attribuer_mission_bouton(self, interaction: discord.Interaction, cat: str):
         if interaction.user.id != self.joueur_id:
             await interaction.response.send_message("❌ Ce ticket ne t'appartient pas.", ephemeral=True)
-            await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Interception bouton choix difficulté par un tiers ({interaction.user.name}) sur {interaction.guild.name}")
             return
             
         guild_id = interaction.guild.id
@@ -443,7 +626,6 @@ class VueChoixDifficulte(discord.ui.View):
         missions_dispo = charger_missions_fichier(guild_id)
         if not missions_dispo[cat]:
             await interaction.response.send_message(f"❌ Plus de mission disponible dans la catégorie `{cat.upper()}` sur ce serveur.", ephemeral=True)
-            await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Échec attribution bouton : catégorie {cat} vide sur {interaction.guild.name}")
             return
 
         mission_choisie = random.choice(missions_dispo[cat])
@@ -484,205 +666,13 @@ class VueChoixDifficulte(discord.ui.View):
     async def btn_royal(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.attribuer_mission_bouton(interaction, "royal")
 
-class VueGestionJoueurMission(discord.ui.View):
-    def __init__(self, joueur_id):
-        super().__init__(timeout=None)
-        self.joueur_id = joueur_id
-
-    @discord.ui.button(label="🏁 Finir la mission", style=discord.ButtonStyle.success, custom_id="joueur_finir_mission")
-    async def joueur_finir(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.joueur_id:
-            await interaction.response.send_message("❌ Cet objectif ne t'appartient pas.", ephemeral=True)
-            await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Tentative fin de mission non autorisée par {interaction.user.name} sur {interaction.guild.name}")
-            return
-
-        g_id = interaction.guild.id
-        if g_id not in missions_actives or self.joueur_id not in missions_actives[g_id]:
-            await interaction.response.send_message("❌ Tu n'as aucune mission active sur ce serveur.", ephemeral=True)
-            return
-
-        m_info = missions_actives[g_id][self.joueur_id]
-        if not m_info.get("en_attente", False):
-            m_info["en_attente"] = True
-            m_info["moment_gel"] = datetime.now()
-
-        for child in self.children: child.disabled = True
-        await interaction.response.edit_message(view=self)
-
-        role_instructeur = discord.utils.get(interaction.guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]")
-        mention_ins = role_instructeur.mention if role_instructeur else '@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]'
-
-        await interaction.channel.set_permissions(interaction.user, read_messages=True, send_messages=False)
-        await interaction.channel.send(f"💬 {interaction.user.mention}, un instructeur a été notifié. Votre demande va être traitée dans les plus brefs délais.")
-        
-        msg_fin = (
-            f"📢 {mention_ins} ! {interaction.user.mention} déclare avoir fini sa mission via l'interface : *\"{m_info['texte']}\"* !\n"
-            f"⏱️ **Le chrono est mis en pause.** Choisissez l'action appropriée :"
-        )
-        await envoyer_double_notification(interaction.guild, msg_fin, f"📢 {mention_ins} — <@{self.joueur_id}> demande une validation pour : *\"{m_info['texte']}\"* dans {interaction.channel.mention}", view=VueEvaluationMission, joueur_id=self.joueur_id)
-        await envoyer_log_proprietaire(bot, f"LOG ABSOLU - JOUEUR FINIR : {interaction.user.name} a cliqué Finir la mission sur {interaction.guild.name}")
-
-    @discord.ui.button(label="❌ Abandonner", style=discord.ButtonStyle.danger, custom_id="joueur_abandonner_mission")
-    async def joueur_abandonner(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.joueur_id:
-            await interaction.response.send_message("❌ Tu ne peux pas abandonner la mission de quelqu'un d'autre.", ephemeral=True)
-            return
-
-        g_id = interaction.guild.id
-        if g_id not in missions_actives or self.joueur_id not in missions_actives[g_id]:
-            await interaction.response.send_message("❌ Tu n'as pas de mission active à abandonner sur ce serveur.", ephemeral=True)
-            return
-
-        for child in self.children: child.disabled = True
-        await interaction.response.edit_message(view=self)
-        await action_refuser_mission(self.joueur_id, interaction.channel)
-        await envoyer_log_proprietaire(bot, f"LOG ABSOLU - JOUEUR ABANDONNER : {interaction.user.name} a abandonné sa mission sur {interaction.guild.name}")
-
-class VueEvaluationMission(discord.ui.View):
-    def __init__(self, joueur_id):
-        super().__init__(timeout=None)
-        self.joueur_id = joueur_id
-
-    @discord.ui.button(label="✅ Accepter", style=discord.ButtonStyle.success, custom_id="eval_accepter")
-    async def eval_accepter(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not verifier_permissions_staff(interaction.user):
-            await interaction.response.send_message("❌ Tu n'as pas l'autorité nécessaire pour évaluer cet ordre.", ephemeral=True)
-            await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Tentative évaluation Accepter non autorisée par {interaction.user.name}")
-            return
-        
-        for child in self.children: child.disabled = True
-        try: await interaction.response.edit_message(view=self)
-        except: pass
-        
-        chan_cible = None
-        for g in bot.guilds:
-            g_id = g.id
-            if g_id in missions_actives and self.joueur_id in missions_actives[g_id]:
-                chan_cible = bot.get_channel(missions_actives[g_id][self.joueur_id]["channel_id"])
-                break
-        if not chan_cible:
-            chan_cible = interaction.channel
-
-        await action_accepter_mission(self.joueur_id, chan_cible)
-        await envoyer_log_proprietaire(bot, f"LOG ABSOLU - STAFF EVAL ACCEPTER : Par {interaction.user.name} pour le joueur {self.joueur_id}")
-
-    @discord.ui.button(label="❌ Refuser", style=discord.ButtonStyle.danger, custom_id="eval_refuser")
-    async def eval_refuser(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not verifier_permissions_staff(interaction.user):
-            await interaction.response.send_message("❌ Tu n'as pas l'autorité nécessaire pour évaluer cet ordre.", ephemeral=True)
-            await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Tentative évaluation Refuser non autorisée par {interaction.user.name}")
-            return
-        
-        for child in self.children: child.disabled = True
-        try: await interaction.response.edit_message(view=self)
-        except: pass
-        
-        chan_cible = None
-        for g in bot.guilds:
-            g_id = g.id
-            if g_id in missions_actives and self.joueur_id in missions_actives[g_id]:
-                chan_cible = bot.get_channel(missions_actives[g_id][self.joueur_id]["channel_id"])
-                break
-        if not chan_cible:
-            chan_cible = interaction.channel
-
-        await action_refuser_mission(self.joueur_id, chan_cible)
-        await envoyer_log_proprietaire(bot, f"LOG ABSOLU - STAFF EVAL REFUSER : Par {interaction.user.name} pour le joueur {self.joueur_id}")
-
-    @discord.ui.button(label="📸 Demander des preuves", style=discord.ButtonStyle.primary, custom_id="eval_preuve")
-    async def eval_preuve(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not verifier_permissions_staff(interaction.user):
-            await interaction.response.send_message("❌ Tu n'as pas l'autorité nécessaire.", ephemeral=True)
-            return
-
-        for child in self.children: child.disabled = True
-        try: await interaction.response.edit_message(view=self)
-        except: pass
-        
-        target_guild = None
-        chan_cible = None
-        for g in bot.guilds:
-            g_id = g.id
-            if g_id in missions_actives and self.joueur_id in missions_actives[g_id]:
-                target_guild = g
-                chan_cible = bot.get_channel(missions_actives[g_id][self.joueur_id]["channel_id"])
-                break
-        if not target_guild:
-            target_guild = interaction.guild
-        if not chan_cible:
-            chan_cible = interaction.channel
-
-        await action_demander_preuve(self.joueur_id, chan_cible, target_guild)
-        await envoyer_log_proprietaire(bot, f"LOG ABSOLU - STAFF EVAL PREUVE : Par {interaction.user.name} pour le joueur {self.joueur_id}")
-
-class VueEvaluationMissionMP(discord.ui.View):
-    def __init__(self, guild_target, joueur_id):
-        super().__init__(timeout=None)
-        self.guild_target = guild_target
-        self.joueur_id = joueur_id
-
-    @discord.ui.button(label="✅ Accepter (MP)", style=discord.ButtonStyle.success, custom_id="eval_mp_accepter")
-    async def eval_mp_accepter(self, interaction: discord.Interaction, button: discord.ui.Button):
-        for child in self.children: child.disabled = True
-        try: await interaction.response.edit_message(view=self)
-        except: pass
-
-        chan_cible = None
-        if self.guild_target and self.guild_target.id in missions_actives and self.joueur_id in missions_actives[self.guild_target.id]:
-            chan_cible = bot.get_channel(missions_actives[self.guild_target.id][self.joueur_id]["channel_id"])
-        if not chan_cible and self.guild_target:
-            chan_cible = discord.utils.get(self.guild_target.text_channels, name="validation-mission")
-        
-        if chan_cible:
-            await action_accepter_mission(self.joueur_id, chan_cible)
-            await interaction.followup.send("✅ Mission acceptée avec succès depuis les logs !", ephemeral=True)
-        else:
-            await interaction.followup.send("❌ Salon introuvable pour cette mission.", ephemeral=True)
-
-    @discord.ui.button(label="❌ Refuser (MP)", style=discord.ButtonStyle.danger, custom_id="eval_mp_refuser")
-    async def eval_mp_refuser(self, interaction: discord.Interaction, button: discord.ui.Button):
-        for child in self.children: child.disabled = True
-        try: await interaction.response.edit_message(view=self)
-        except: pass
-
-        chan_cible = None
-        if self.guild_target and self.guild_target.id in missions_actives and self.joueur_id in missions_actives[self.guild_target.id]:
-            chan_cible = bot.get_channel(missions_actives[self.guild_target.id][self.joueur_id]["channel_id"])
-        if not chan_cible and self.guild_target:
-            chan_cible = discord.utils.get(self.guild_target.text_channels, name="validation-mission")
-        
-        if chan_cible:
-            await action_refuser_mission(self.joueur_id, chan_cible)
-            await interaction.followup.send("❌ Mission refusée depuis les logs.", ephemeral=True)
-        else:
-            await interaction.followup.send("❌ Salon introuvable pour cette mission.", ephemeral=True)
-
-    @discord.ui.button(label="📸 Preuve (MP)", style=discord.ButtonStyle.primary, custom_id="eval_mp_preuve")
-    async def eval_mp_preuve(self, interaction: discord.Interaction, button: discord.ui.Button):
-        for child in self.children: child.disabled = True
-        try: await interaction.response.edit_message(view=self)
-        except: pass
-
-        chan_cible = None
-        if self.guild_target and self.guild_target.id in missions_actives and self.joueur_id in missions_actives[self.guild_target.id]:
-            chan_cible = bot.get_channel(missions_actives[self.guild_target.id][self.joueur_id]["channel_id"])
-        
-        if chan_cible and self.guild_target:
-            await action_demander_preuve(self.joueur_id, chan_cible, self.guild_target)
-            await interaction.followup.send("📸 Demande de preuve transmise depuis les logs.", ephemeral=True)
-        else:
-            await interaction.followup.send("❌ Salon introuvable pour cette mission.", ephemeral=True)
-
 @bot.command(name="import")
 async def importer_missions(ctx, mode: str = "texte"):
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - COMMANDE TEXTE !import exécutée par {ctx.author.name} avec mode '{mode}' sur {ctx.guild.name}")
     if not verifier_permissions_staff(ctx.author):
         await ctx.send("❌ Permission refusée.")
-        await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Refus !import pour {ctx.author.name}")
         return
 
     guild_id = ctx.guild.id
-
     if mode.lower() == "tout":
         missions_a_restaurer = [
             ("commune", "récolter 3 stacks de diamants", "3 jours"),
@@ -743,7 +733,6 @@ async def importer_missions(ctx, mode: str = "texte"):
             sauvegarder_mission_fichier(guild_id, cat, texte, temps)
         
         await ctx.send(f"✅ **Succès !** Les {len(missions_a_restaurer)} missions officielles ont toutes été injectées pour ce serveur.")
-        await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Importation totale sur le serveur {ctx.guild.name} ({len(missions_a_restaurer)} missions).")
         return
 
     if ctx.message.attachments:
@@ -752,7 +741,6 @@ async def importer_missions(ctx, mode: str = "texte"):
             attachement = ctx.message.attachments[0]
             contenu_bytes = await attachement.read()
             lignes = contenu_bytes.decode("utf-8").splitlines()
-            
             for ligne in lignes:
                 ligne = ligne.strip()
                 if not ligne or "|" not in ligne: continue
@@ -762,151 +750,68 @@ async def importer_missions(ctx, mode: str = "texte"):
                     if cat in ["commune", "moyenne", "difficile", "royal"]:
                         sauvegarder_mission_fichier(guild_id, cat, texte, delai)
                         nb_ajoutees += 1
-
             await ctx.send(f"✅ **Succès !** {nb_ajoutees} missions ont été importées à partir du fichier `.txt` pour ce serveur.")
-            await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Importation par fichier `.txt` sur {ctx.guild.name} ({nb_ajoutees} missions).")
             return
         except Exception as e:
             await ctx.send(f"❌ Erreur lors de la lecture du fichier joint : {e}")
-            await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Erreur lecture fichier import : {e}")
             return
 
-    await ctx.send("📥 **Envoie ou colle ton bloc de missions** (ou glisse ton fichier `.txt` exporté) dans les 60 secondes :")
-
-    def check(m):
-        return m.author == ctx.author and m.channel == ctx.channel
-
+    await ctx.send("📥 **Envoie ou colle ton bloc de missions** dans les 60 secondes :")
+    def check(m): return m.author == ctx.author and m.channel == ctx.channel
     try:
         msg = await bot.wait_for('message', timeout=60.0, check=check)
     except asyncio.TimeoutError:
         await ctx.send("⏰ Temps écoulé. Commande annulée.")
         return
 
-    if msg.attachments:
-        nb_ajoutees = 0
-        try:
-            attachement = msg.attachments[0]
-            contenu_bytes = await attachement.read()
-            lignes = contenu_bytes.decode("utf-8").splitlines()
-            for ligne in lignes:
-                ligne = ligne.strip()
-                if not ligne or "|" not in ligne: continue
-                parts = ligne.split("|", 2)
-                if len(parts) == 3:
-                    cat, texte, delai = parts[0].strip(), parts[1].strip(), parts[2].strip()
-                    if cat in ["commune", "moyenne", "difficile", "royal"]:
-                        sauvegarder_mission_fichier(guild_id, cat, texte, delai)
-                        nb_ajoutees += 1
-            await ctx.send(f"✅ **Succès !** {nb_ajoutees} missions ont été importées depuis le fichier pour ce serveur.")
-            await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Importation par fichier joint sur {ctx.guild.name} ({nb_ajoutees} missions).")
-            return
-        except Exception as e:
-            await ctx.send(f"❌ Erreur : {e}")
-            return
-
     lignes = msg.content.split('\n')
     nb_ajoutees = 0
-    categorie_actuelle = "commune"
-
-    correspondance_categories = {
-        "commune": "commune",
-        "moyenne": "moyenne",
-        "difficile": "difficile",
-        "royal": "royal",
-        "décret royal": "royal",
-        "ordre majeur": "difficile"
-    }
-
-    delais = {
-        "commune": "3 jours",
-        "moyenne": "7 jours",
-        "difficile": "15 jours",
-        "royal": "20 jours"
-    }
-
     for ligne in lignes:
         ligne_propre = ligne.strip()
-        if not ligne_propre: continue
+        if not ligne_propre or "|" not in ligne_propre: continue
+        parts = ligne_propre.split("|", 2)
+        if len(parts) == 3:
+            cat, texte, delai = parts[0].strip(), parts[1].strip(), parts[2].strip()
+            if cat in ["commune", "moyenne", "difficile", "royal"]:
+                sauvegarder_mission_fichier(guild_id, cat, texte, delai)
+                nb_ajoutees += 1
 
-        if "|" in ligne_propre:
-            parts = ligne_propre.split("|", 2)
-            if len(parts) == 3:
-                cat, texte, delai = parts[0].strip(), parts[1].strip(), parts[2].strip()
-                if cat in ["commune", "moyenne", "difficile", "royal"]:
-                    sauvegarder_mission_fichier(guild_id, cat, texte, delai)
-                    nb_ajoutees += 1
-                    continue
-
-        ligne_lower = ligne_propre.lower()
-        found_cat = False
-        for key, val in correspondance_categories.items():
-            if key in ligne_lower:
-                categorie_actuelle = val
-                found_cat = True
-                break
-        if found_cat: continue
-
-        texte_mission = ligne_propre
-        for prefixe in ["1.", "2.", "3.", "4.", "5.", "6.", "7.", "8.", "9.", "10.", "-", "•"]:
-            if texte_mission.startswith(prefixe):
-                texte_mission = texte_mission[len(prefixe):].strip()
-                break
-
-        if not texte_mission: continue
-
-        temps = delais.get(categorie_actuelle, "7 jours")
-        sauvegarder_mission_fichier(guild_id, categorie_actuelle, texte_mission, temps)
-        nb_ajoutees += 1
-
-    await ctx.send(f"✅ **Succès !** {nb_ajoutees} missions ont été importées dynamiquement pour ce serveur.")
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Importation personnalisée sur {ctx.guild.name} ({nb_ajoutees} missions).")
+    await ctx.send(f"✅ **Succès !** {nb_ajoutees} missions ont été importées dynamiquement.")
 
 @bot.command(name="export")
 async def exporter_missions(ctx):
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - COMMANDE TEXTE !export exécutée par {ctx.author.name} sur {ctx.guild.name}")
     if not verifier_permissions_staff(ctx.author):
         await ctx.send("❌ Permission refusée.")
         return
-
     file_name = get_file_name(ctx.guild.id)
     if not os.path.exists(file_name):
-        await ctx.send("❌ Aucun fichier de missions trouvé pour ce serveur.")
+        await ctx.send("❌ Aucun fichier trouvé.")
         return
-
-    try:
-        with open(file_name, "r", encoding="utf-8") as f:
-            contenu = f.read()
-
-        if not contenu.strip():
-            await ctx.send("⚠️ Le fichier de missions de ce serveur est vide.")
-            return
-
-        buffer = io.BytesIO(contenu.encode("utf-8"))
-        buffer.seek(0)
-        
-        fichier_discord = discord.File(buffer, filename=file_name)
-        await ctx.send("📤 **Voici l'export complet des missions de ce serveur :**", file=fichier_discord)
-        await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Export des missions demandé sur le serveur {ctx.guild.name}.")
-    except Exception as e:
-        await ctx.send(f"❌ Erreur lors de l'export : {e}")
+    with open(file_name, "r", encoding="utf-8") as f:
+        contenu = f.read()
+    buffer = io.BytesIO(contenu.encode("utf-8"))
+    buffer.seek(0)
+    await ctx.send("📤 **Export :**", file=discord.File(buffer, filename=file_name))
 
 @bot.command(name="delall")
 async def supprimer_toutes_missions_cmd(ctx):
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - COMMANDE TEXTE !delall exécutée par {ctx.author.name} sur {ctx.guild.name}")
     if not verifier_permissions_staff(ctx.author):
         await ctx.send("❌ Permission refusée.")
         return
     vider_toutes_missions(ctx.guild.id)
-    await ctx.send("🗑️ **Toutes les missions de ce serveur ont été supprimées avec succès !**")
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Suppression totale de toutes les missions sur le serveur {ctx.guild.name}.")
+    await ctx.send("🗑️ **Toutes les missions de ce serveur ont été supprimées !**")
 
 @bot.event
 async def on_ready():
     if not verifier_temps_missions.is_running(): verifier_temps_missions.start()
+    
+    # Enregistrement persistant des vues pour éviter l'erreur "Valerius n'a pas répondu à temps" après redémarrage
     bot.add_view(VueBoutonTicket())
     bot.add_view(VueFermerTicket())
     bot.add_view(VueButinRecupere())
     bot.add_view(VueAccueilArrivant())
+    bot.add_view(VueGestionJoueurMission())
+    bot.add_view(VueEvaluationMission())
     
     salon_accueil = bot.get_channel(WELCOME_CHANNEL_ID)
     if salon_accueil:
@@ -930,109 +835,66 @@ async def on_ready():
         await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Bot prêt. {len(synced)} commandes synchronisées avec succès.")
     except Exception as e:
         print(f"Erreur de synchronisation slash: {e}")
-        await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Erreur de synchronisation slash: {e}")
 
 @bot.event
 async def on_message(message):
     await bot.process_commands(message)
-
     if message.author.bot: return
     if message.channel.name and "🪖-ordre-" in message.channel.name:
-        await envoyer_log_proprietaire(bot, f"LOG ABSOLU - MESSAGE TICKET : De {message.author.name} dans {message.channel.name} ({message.guild.name}) : {message.content}")
-        if message.attachments:
-            await envoyer_log_proprietaire(bot, f"LOG ABSOLU - PIECE JOINTE / SCREEN TICKET : De {message.author.name} dans {message.channel.name} ({message.guild.name})")
-
         joueur_id = message.author.id
         g_id = message.guild.id
         if g_id in missions_actives and joueur_id in missions_actives[g_id] and missions_actives[g_id][joueur_id].get("en_attente", False):
             await message.channel.send(f"💬 {message.author.mention}, un instructeur a été ping. Votre demande a bien été envoyée et va être traitée.")
             msg_p = f"📸 **Preuve reçue** pour la mission de <@{joueur_id}>. En attente de l'analyse finale de l'administration :"
-            await envoyer_double_notification(message.guild, msg_p, f"📸 Preuve d'accomplissement déposée par <@{joueur_id}> dans {message.channel.mention}.", view=VueEvaluationMission, joueur_id=joueur_id)
+            await envoyer_double_notification(message.guild, msg_p, f"📸 Preuve d'accomplissement déposée par <@{joueur_id}> dans {message.channel.mention}.", view=VueEvaluationMission(joueur_id), joueur_id=joueur_id)
 
 async def generer_panneau_aide(interaction: discord.Interaction):
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /aide ou /help exécutée par {interaction.user.name} sur {interaction.guild.name}")
     embed = discord.Embed(title="⚜️ TABLEAU DES ORDRES DE VALERIUS ⚜️", color=discord.Color.gold())
     citoyen_desc = (
         "⚔️ **SYSTÈMÈ DE QUÊTES**\n"
-        "Ouvre un ticket d'ordre privé dans la catégorie dédiée.\n\n"
         "`/missionaccomplie` ↳ Déclarer la fin de ta tâche active.\n"
         "`/missions_en_cours` ↳ Statut complet de ton contrat.\n"
-        "`/tuto` ↳ Guide complet du citoyen.\n\n"
-        "📊 **ARCHIVES PERSONNELLES**\n"
+        "`/tuto` ↳ Guide complet du citoyen.\n"
         "`/historique` ↳ Consulte ton bilan d'objectifs."
     )
     embed.add_field(name="👥 ESPACE DES CITOYENS", value=citoyen_desc, inline=False)
     if verifier_permissions_staff(interaction.user):
         admin_desc = (
-            "🚨 **HAUT COMMANDEMENT (ADMIN / INSTRUCTEUR)**\n"
-            "`/tutoadm` ↳ Manuel de l'administration.\n"
-            "`/openticket @joueur` ↳ Ouvrir un ticket pour un citoyen.\n"
-            "`/fermerticket` ↳ Fermer un salon de ticket.\n"
-            "`/attribuer_mission` ↳ Assigner une mission auto à un joueur.\n"
-            "`/export_actives` | `/import_actives` ↳ Sauvegarder/Restaurer les missions en cours.\n"
-            "`/total_backup` | `/total_restore` ↳ Sauvegarde/Restauration globale.\n"
-            "`/mission_expiration` ↳ Lancer l'alerte d'inactivité (1h).\n"
-            "`/missionaccepter` | `/missionrefuser` | `/missionpreuve`\n"
-            "📂 **BASE DE DONNÉES**\n"
-            "`/listemissions` | `/addmission` | `/delmission` | `/resetmissions`\n"
-            "*(Commandes texte : `!export` / `!import` / `!delall`)*"
+            "🚨 **ADMINISTRATION**\n"
+            "`/openticket @joueur` | `/fermerticket` | `/attribuer_mission`\n"
+            "`/export_actives` | `/import_actives` | `/total_backup` | `/total_restore`\n"
+            "`/missionaccepter` | `/missionrefuser` | `/missionpreuve` | `/listemissions`"
         )
-        embed.add_field(name="👑 ADMINISTRATION", value=admin_desc, inline=False)
+        embed.add_field(name="👑 HAUT COMMANDEMENT", value=admin_desc, inline=False)
     await interaction.response.send_message(embed=embed, view=VueBoutonTicket())
 
 @bot.tree.command(name="aide", description="Affiche le tableau de bord des quêtes de Valerius.")
-async def aide(interaction: discord.Interaction):
-    await generer_panneau_aide(interaction)
+async def aide(interaction: discord.Interaction): await generer_panneau_aide(interaction)
 
 @bot.tree.command(name="help", description="Affiche le tableau de bord des quêtes de Valerius.")
-async def help_cmd(interaction: discord.Interaction):
-    await generer_panneau_aide(interaction)
+async def help_cmd(interaction: discord.Interaction): await generer_panneau_aide(interaction)
 
 @bot.tree.command(name="tuto", description="Guide d'utilisation pour mener à bien tes décrets.")
 async def tuto(interaction: discord.Interaction):
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /tuto exécutée par {interaction.user.name} sur {interaction.guild.name}")
-    embed_tuto = discord.Embed(
-        title="🪖 GUIDE DU CITOYEN DE VALERIUS 🪖",
-        description="Suis ces instructions impériales pour mener à bien tes décrets sans subir les foudres de l'Article V !",
-        color=discord.Color.green()
-    )
-    embed_tuto.add_field(
-        name="🎫 Étape 1 : Ouvrir l'Ordre",
-        value="Rends-toi dans la catégorie **⚜️ == [ 𝕸𝖎s𝖘𝖎𝖔𝖓𝖘 ] ==** et utilise `/aide` ou `/help` pour obtenir le bouton vert d'ouverture de ticket.",
-        inline=False
-    )
-    embed_tuto.add_field(
-        name="📜 Étape 2 : Sélectionner sa Difficulté",
-        value="Dans ton ticket, choisis ton contrat : `Commune`, `Moyenne`, `Difficile` ou `Royal`. Le chrono démarre instantanément !",
-        inline=False
-    )
-    embed_tuto.add_field(
-        name="🏁 Étape 3 : Déclarer l'accomplissement",
-        value="Une fois ton objectif réalisé en jeu, utilise le bouton vert **Finir la mission** ou la commande `/missionaccomplie`.",
-        inline=False
-    )
-    embed_tuto.set_footer(text="Valerius • Que la fortune te sourie")
-    await interaction.response.send_message(embed=embed_tuto)
+    embed_tuto = discord.Embed(title="🪖 GUIDE DU CITOYEN DE VALERIUS 🪖", description="Suis ces instructions pour mener à bien tes décrets !", color=discord.Color.green())
+    embed_tuto.add_field(name="🎫 Étape 1", value="Ouvre un ticket d'ordre via le panneau d'aide.", inline=False)
+    embed_tuto.add_field(name="📜 Étape 2", value="Choisis ta difficulté pour lancer le chrono.", inline=False)
+    embed_tuto.add_field(name="🏁 Étape 3", value="Utilise le bouton 'Finir la mission' une fois terminé.", inline=False)
+    await interaction.response.send_message(embed=embed_tuto, ephemeral=True)
 
-@bot.tree.command(name="openticket", description="Ouvre un ticket de mission pour un citoyen spécifique (Staff uniquement).")
-@app_commands.describe(joueur="Le citoyen pour qui ouvrir le ticket d'ordre")
+@bot.tree.command(name="openticket", description="Ouvre un ticket de mission pour un citoyen spécifique (Staff).")
+@app_commands.describe(joueur="Le citoyen")
 async def openticket(interaction: discord.Interaction, joueur: discord.Member):
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /openticket exécutée par {interaction.user.name} pour {joueur.name} sur {interaction.guild.name}")
-    
     if not verifier_permissions_staff(interaction.user):
-        await interaction.response.send_message("❌ Tu n'as pas l'autorité nécessaire pour ouvrir un ticket pour autrui.", ephemeral=True)
-        await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Refus /openticket pour {interaction.user.name}")
+        await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
         return
-
     guild = interaction.guild
     g_id = guild.id
-
     if g_id in missions_actives and joueur.id in missions_actives[g_id]:
-        await interaction.response.send_message(f"❌ {joueur.mention} a déjà une mission active en cours sur ce serveur !", ephemeral=True)
+        await interaction.response.send_message(f"❌ {joueur.mention} a déjà une mission active !", ephemeral=True)
         return
 
     await interaction.response.defer(ephemeral=True)
-
     role_instructeur = discord.utils.get(guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]")
     role_palais = discord.utils.get(guild.roles, name="[ Palais Royal ]") or discord.utils.get(guild.roles, name="Palais Royal")
 
@@ -1041,317 +903,184 @@ async def openticket(interaction: discord.Interaction, joueur: discord.Member):
         joueur: discord.PermissionOverwrite(read_messages=True, send_messages=True, view_channel=True),
         guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True, view_channel=True)
     }
-    
     if role_instructeur: overwrites[role_instructeur] = discord.PermissionOverwrite(read_messages=True, send_messages=True, view_channel=True)
     if role_palais: overwrites[role_palais] = discord.PermissionOverwrite(read_messages=True, send_messages=True, view_channel=True)
 
-    nom_salon = f"🪖-ordre-{joueur.name}"
-    ticket_channel = await guild.create_text_channel(name=nom_salon, overwrites=overwrites, category=interaction.channel.category if interaction.channel.category else None)
-
-    embed_ticket = discord.Embed(
-        title="⚜️ CENTRE DE SÉLECTION DES DÉCRETS ⚜️",
-        description=f"Ticket ouvert par l'administration pour {joueur.mention}.\nChoisis la difficulté de l'objectif que tu souhaites accomplir aujourd'hui pour Valerius.",
-        color=discord.Color.dark_red()
-    )
+    ticket_channel = await guild.create_text_channel(name=f"🪖-ordre-{joueur.name}", overwrites=overwrites, category=interaction.channel.category)
+    embed_ticket = discord.Embed(title="⚜️ CENTRE DE SÉLECTION DES DÉCRETS ⚜️", description=f"Ticket ouvert pour {joueur.mention}.", color=discord.Color.dark_red())
     await ticket_channel.send(embed=embed_ticket, view=VueChoixDifficulte(joueur.id))
-    
     asyncio.create_task(gerer_expiration_automatique(guild, ticket_channel.id, joueur.id))
-    await interaction.followup.send(f"✅ Le ticket pour {joueur.mention} a été créé avec succès : {ticket_channel.mention}", ephemeral=True)
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - OPENTICKET ADMIN : Salon {ticket_channel.name} ouvert par {interaction.user.name} pour {joueur.name} sur {interaction.guild.name}")
+    await interaction.followup.send(f"✅ Ticket créé : {ticket_channel.mention}", ephemeral=True)
 
-@bot.tree.command(name="fermerticket", description="Ferme et supprime immédiatement le salon du ticket actuel et sa mission liée (Staff uniquement).")
+@bot.tree.command(name="fermerticket", description="Ferme et supprime le salon actuel (Staff).")
 async def fermerticket(interaction: discord.Interaction):
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /fermerticket exécutée par {interaction.user.name} dans {interaction.channel.name} ({interaction.guild.name})")
     if not verifier_permissions_staff(interaction.user):
-        await interaction.response.send_message("❌ Tu n'as pas l'autorité nécessaire pour fermer ce ticket.", ephemeral=True)
+        await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
         return
-    
-    await interaction.response.send_message("⚙️ Fermeture et suppression du salon du ticket par l'administration...", ephemeral=True)
-    
+    await interaction.response.send_message("⚙️ Suppression du salon...", ephemeral=True)
     g_id = interaction.guild.id
     if g_id in missions_actives:
         for j_id, m_info in list(missions_actives[g_id].items()):
-            if m_info.get("channel_id") == interaction.channel.id or f"🪖-ordre-" in interaction.channel.name:
-                member = interaction.guild.get_member(j_id)
-                if member and member.name.lower() in interaction.channel.name.lower():
-                    del missions_actives[g_id][j_id]
-                    break
+            if m_info.get("channel_id") == interaction.channel.id:
+                del missions_actives[g_id][j_id]
+                break
+    try: await interaction.channel.delete()
+    except: pass
 
-    try:
-        await interaction.channel.delete(reason=f"Fermé par l'administrateur {interaction.user.name}")
-        await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Salon {interaction.channel.name} supprimé via /fermerticket sur {interaction.guild.name}")
-    except Exception as e:
-        await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Erreur suppression salon /fermerticket : {e}")
-
-@bot.tree.command(name="attribuer_mission", description="Attribue automatiquement et directement une mission aléatoire d'une catégorie à un joueur.")
-@app_commands.describe(joueur="Le citoyen destinataire", categorie="commune, moyenne, difficile, royal")
+@bot.tree.command(name="attribuer_mission", description="Attribue directement une mission à un joueur (Staff).")
+@app_commands.describe(joueur="Le citoyen", categorie="commune, moyenne, difficile, royal")
 async def attribuer_mission(interaction: discord.Interaction, joueur: discord.Member, categorie: str):
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /attribuer_mission exécutée par {interaction.user.name} pour {joueur.name} ({categorie}) sur {interaction.guild.name}")
     if not verifier_permissions_staff(interaction.user):
-        await interaction.response.send_message("❌ Tu n'as pas l'autorité nécessaire pour attribuer un décret.", ephemeral=True)
+        await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
         return
-
     cat = categorie.lower().strip()
-    if cat in ["commune", "commun"]: cat = "commune"
-    elif cat in ["moyenne", "moyen"]: cat = "moyenne"
-    elif cat in ["difficile"]: cat = "difficile"
-    elif cat in ["royal", "royale"]: cat = "royal"
-    else:
-        await interaction.response.send_message("❌ Catégorie invalide. Choisis entre : commune, moyenne, difficile, royal.", ephemeral=True)
-        return
-
     guild_id = interaction.guild.id
-    if guild_id not in missions_actives:
-        missions_actives[guild_id] = {}
-
+    if guild_id not in missions_actives: missions_actives[guild_id] = {}
     if joueur.id in missions_actives[guild_id]:
-        await interaction.response.send_message(f"❌ {joueur.mention} a déjà une mission active en cours sur ce serveur !", ephemeral=True)
+        await interaction.response.send_message("❌ Ce joueur a déjà une mission active.", ephemeral=True)
         return
-
     missions_dispo = charger_missions_fichier(guild_id)
-    if not missions_dispo[cat]:
-        await interaction.response.send_message(f"❌ Plus aucune mission disponible dans la catégorie `{cat.upper()}` sur ce serveur.", ephemeral=True)
+    if not missions_dispo.get(cat):
+        await interaction.response.send_message("❌ Catégorie vide.", ephemeral=True)
         return
-
     mission_choisie = random.choice(missions_dispo[cat])
     duree = extraire_duree(mission_choisie["delai"])
     date_fin = datetime.now() + duree
     timestamp_discord = int(date_fin.timestamp())
 
     missions_actives[guild_id][joueur.id] = {
-        "texte": mission_choisie["texte"], 
-        "delai_texte": mission_choisie["delai"],
-        "date_debut": datetime.now(), 
-        "date_fin": date_fin, 
-        "duree_totale": duree,
-        "cat": cat, 
-        "channel_id": interaction.channel.id, 
-        "alerte_moitie": False, 
-        "alerte_un_quart": False, 
-        "en_attente": False
+        "texte": mission_choisie["texte"], "delai_texte": mission_choisie["delai"],
+        "date_debut": datetime.now(), "date_fin": date_fin, "duree_totale": duree,
+        "cat": cat, "channel_id": interaction.channel.id, "alerte_moitie": False, "alerte_un_quart": False, "en_attente": False
     }
+    embed = discord.Embed(title="📜 DÉCRET IMPÉRIAL ATTRIBUÉ", color=discord.Color.gold())
+    embed.add_field(name="🎯 Objectif", value=f"*{mission_choisie['texte']}*", inline=False)
+    embed.add_field(name="⏳ Fin", value=f"<t:{timestamp_discord}:R>", inline=False)
+    await interaction.response.send_message(content=f"✅ Attribué à {joueur.mention} !", embed=embed, view=VueGestionJoueurMission(joueur.id))
 
-    embed_mission = discord.Embed(title="📜 DÉCRET IMPÉRIAL ATTRIBUÉ PAR L'ADMINISTRATION", color=discord.Color.gold())
-    embed_mission.add_field(name="🎯 Objectif", value=f"*{mission_choisie['texte']}*", inline=False)
-    embed_mission.add_field(name="📊 Difficulté", value=f"`{cat.upper()}`", inline=True)
-    embed_mission.add_field(name="⏳ Temps imparti", value=f"<t:{timestamp_discord}:R> (soit le <t:{timestamp_discord}:f>)", inline=False)
-    
-    await interaction.response.send_message(content=f"✅ Mission attribuée avec succès à {joueur.mention} dans ce salon !", embed=embed_mission, view=VueGestionJoueurMission(joueur.id))
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Attribution manuelle réussie d'une mission {cat} ('{mission_choisie['texte']}') à {joueur.name} sur {interaction.guild.name}.")
-
-@bot.tree.command(name="export_actives", description="Exporte et envoie un fichier .txt de toutes les missions actuellement en cours.")
+@bot.tree.command(name="export_actives", description="Exporte les missions en cours (.txt).")
 async def export_actives(interaction: discord.Interaction):
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /export_actives exécutée par {interaction.user.name} sur {interaction.guild.name}")
     if not verifier_permissions_staff(interaction.user):
         await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
         return
-
     guild_id = interaction.guild.id
     actives_serveur = {}
     if guild_id in missions_actives:
         for j_id, m_data in missions_actives[guild_id].items():
-            chan = bot.get_channel(m_data["channel_id"])
-            if chan and chan.guild.id == guild_id:
-                actives_serveur[str(j_id)] = {
-                    "texte": m_data["texte"],
-                    "delai_texte": m_data["delai_texte"],
-                    "date_debut": m_data["date_debut"].isoformat(),
-                    "date_fin": m_data["date_fin"].isoformat(),
-                    "duree_totale_seconds": m_data["duree_totale"].total_seconds(),
-                    "cat": m_data["cat"],
-                    "channel_id": m_data["channel_id"],
-                    "alerte_moitie": m_data["alerte_moitie"],
-                    "alerte_un_quart": m_data["alerte_un_quart"],
-                    "en_attente": m_data["en_attente"]
-                }
-
+            actives_serveur[str(j_id)] = {
+                "texte": m_data["texte"], "delai_texte": m_data["delai_texte"],
+                "date_debut": m_data["date_debut"].isoformat(), "date_fin": m_data["date_fin"].isoformat(),
+                "duree_totale_seconds": m_data["duree_totale"].total_seconds(), "cat": m_data["cat"],
+                "channel_id": m_data["channel_id"], "alerte_moitie": m_data["alerte_moitie"],
+                "alerte_un_quart": m_data["alerte_un_quart"], "en_attente": m_data["en_attente"]
+            }
     if not actives_serveur:
-        await interaction.response.send_message("⚠️ Aucune mission active en cours sur ce serveur à exporter.", ephemeral=True)
+        await interaction.response.send_message("⚠️ Aucune mission active.", ephemeral=True)
         return
-
-    contenu_json = json.dumps(actives_serveur, indent=4, ensure_ascii=False)
-    buffer = io.BytesIO(contenu_json.encode("utf-8"))
+    buffer = io.BytesIO(json.dumps(actives_serveur, indent=4, ensure_ascii=False).encode("utf-8"))
     buffer.seek(0)
+    await interaction.response.send_message("📤 **Missions en cours :**", file=discord.File(buffer, filename=f"actives_{guild_id}.txt"), ephemeral=True)
 
-    nom_fichier = f"valerius_missions_actives_{guild_id}.txt"
-    fichier_discord = discord.File(buffer, filename=nom_fichier)
-    
-    await interaction.response.send_message("📤 **Voici le fichier de sauvegarde de toutes les missions en cours :**", file=fichier_discord, ephemeral=True)
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Export des missions en cours réussi sur {interaction.guild.name}.")
-
-@bot.tree.command(name="import_actives", description="Réinjecte les missions en cours à l'aide d'un fichier .txt attaché.")
-@app_commands.describe(fichier="Le fichier .txt contenant les missions en cours exportées")
+@bot.tree.command(name="import_actives", description="Importe les missions en cours (.txt).")
 async def import_actives(interaction: discord.Interaction, fichier: discord.Attachment):
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /import_actives exécutée par {interaction.user.name} sur {interaction.guild.name}")
     if not verifier_permissions_staff(interaction.user):
         await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
         return
-
     await interaction.response.defer(ephemeral=True)
     guild_id = interaction.guild.id
-    if guild_id not in missions_actives:
-        missions_actives[guild_id] = {}
-
+    if guild_id not in missions_actives: missions_actives[guild_id] = {}
     try:
-        contenu_bytes = await fichier.read()
-        donnees = json.loads(contenu_bytes.decode("utf-8"))
-        
-        if "missions_actives" in donnees:
-            donnees = donnees["missions_actives"].get(str(guild_id), {})
-
-        nb_restaurees = 0
+        donnees = json.loads((await fichier.read()).decode("utf-8"))
         for str_j_id, m_data in donnees.items():
-            if not str_j_id.isdigit():
-                continue
-                
-            j_id = int(str_j_id)
-            missions_actives[guild_id][j_id] = {
-                "texte": m_data["texte"],
-                "delai_texte": m_data["delai_texte"],
-                "date_debut": datetime.fromisoformat(m_data["date_debut"]),
-                "date_fin": datetime.fromisoformat(m_data["date_fin"]),
-                "duree_totale": timedelta(seconds=m_data["duree_totale_seconds"]),
-                "cat": m_data["cat"],
-                "channel_id": m_data["channel_id"],
-                "alerte_moitie": m_data["alerte_moitie"],
-                "alerte_un_quart": m_data["alerte_un_quart"],
-                "en_attente": m_data["en_attente"]
-            }
-            nb_restaurees += 1
-
-        await interaction.followup.send(f"✅ **Succès !** {nb_restaurees} missions en cours ont été réinjectées et restaurées avec succès.", ephemeral=True)
-        await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Importation réussie des missions en cours sur {interaction.guild.name} ({nb_restaurees} missions restaurées).")
+            if str_j_id.isdigit():
+                missions_actives[guild_id][int(str_j_id)] = {
+                    "texte": m_data["texte"], "delai_texte": m_data["delai_texte"],
+                    "date_debut": datetime.fromisoformat(m_data["date_debut"]),
+                    "date_fin": datetime.fromisoformat(m_data["date_fin"]),
+                    "duree_totale": timedelta(seconds=m_data["duree_totale_seconds"]),
+                    "cat": m_data["cat"], "channel_id": m_data["channel_id"],
+                    "alerte_moitie": m_data["alerte_moitie"], "alerte_un_quart": m_data["alerte_un_quart"],
+                    "en_attente": m_data["en_attente"]
+                }
+        await interaction.followup.send("✅ Missions en cours restaurées !", ephemeral=True)
     except Exception as e:
-        await interaction.followup.send(f"❌ Erreur lors de la lecture ou de la réinjection du fichier : {e}", ephemeral=True)
-        await envoyer_log_proprietaire(bot, f"LOG ABSOLU - ERREUR Import actives sur {interaction.guild.name} : {e}")
+        await interaction.followup.send(f"❌ Erreur : {e}", ephemeral=True)
 
-@bot.tree.command(name="total_backup", description="Exporte une archive complète de toutes les données du bot.")
+@bot.tree.command(name="total_backup", description="Sauvegarde complète du bot (.json).")
 async def total_backup(interaction: discord.Interaction):
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /total_backup exécutée par {interaction.user.name} sur {interaction.guild.name}")
     if not verifier_permissions_staff(interaction.user):
         await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
         return
-
     await interaction.response.defer(ephemeral=True)
-
-    donnees_globales = {
-        "missions_actives": {},
-        "fichiers_disques": {}
-    }
-
+    donnees_globales = {"missions_actives": {}, "fichiers_disques": {}}
     for g_id, j_dict in missions_actives.items():
         donnees_globales["missions_actives"][str(g_id)] = {}
         for j_id, m_data in j_dict.items():
             donnees_globales["missions_actives"][str(g_id)][str(j_id)] = {
-                "texte": m_data["texte"],
-                "delai_texte": m_data["delai_texte"],
-                "date_debut": m_data["date_debut"].isoformat(),
-                "date_fin": m_data["date_fin"].isoformat(),
-                "duree_totale_seconds": m_data["duree_totale"].total_seconds(),
-                "cat": m_data["cat"],
-                "channel_id": m_data["channel_id"],
-                "alerte_moitie": m_data["alerte_moitie"],
-                "alerte_un_quart": m_data["alerte_un_quart"],
-                "en_attente": m_data["en_attente"]
+                "texte": m_data["texte"], "delai_texte": m_data["delai_texte"],
+                "date_debut": m_data["date_debut"].isoformat(), "date_fin": m_data["date_fin"].isoformat(),
+                "duree_totale_seconds": m_data["duree_totale"].total_seconds(), "cat": m_data["cat"],
+                "channel_id": m_data["channel_id"], "alerte_moitie": m_data["alerte_moitie"],
+                "alerte_un_quart": m_data["alerte_un_quart"], "en_attente": m_data["en_attente"]
             }
-
     import glob
-    fichiers_txt = glob.glob("valerius_missions_*.txt")
-    fichiers_json = glob.glob("valerius_profils_*.json")
-
-    contenu_fichiers = {}
-    for f_path in fichiers_txt + fichiers_json:
+    for f_path in glob.glob("valerius_missions_*.txt") + glob.glob("valerius_profils_*.json"):
         if os.path.exists(f_path):
-            with open(f_path, "r", encoding="utf-8") as f:
-                contenu_fichiers[f_path] = f.read()
+            with open(f_path, "r", encoding="utf-8") as f: donnees_globales["fichiers_disques"][f_path] = f.read()
 
-    donnees_globales["fichiers_disques"] = contenu_fichiers
-
-    json_data = json.dumps(donnees_globales, indent=4, ensure_ascii=False)
-    buffer = io.BytesIO(json_data.encode("utf-8"))
+    buffer = io.BytesIO(json.dumps(donnees_globales, indent=4, ensure_ascii=False).encode("utf-8"))
     buffer.seek(0)
+    await interaction.followup.send("📦 **Sauvegarde complète :**", file=discord.File(buffer, filename=f"backup_{datetime.now().strftime('%Y%m%d_%H%M')}.json"), ephemeral=True)
 
-    timestamp_sauvegarde = datetime.now().strftime("%Y-%m-%d_%H-%M")
-    fichier_discord = discord.File(buffer, filename=f"total_backup_valerius_{timestamp_sauvegarde}.json")
-    
-    await interaction.followup.send("📦 **Voici ta sauvegarde complète !** Les salons, les missions en cours et les profils sont inclus.", file=fichier_discord, ephemeral=True)
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Sauvegarde totale générée avec succès sur {interaction.guild.name}.")
-
-@bot.tree.command(name="total_restore", description="Restaure toutes les données à partir d'un fichier de backup.")
-@app_commands.describe(fichier="Le fichier .json de sauvegarde totale")
+@bot.tree.command(name="total_restore", description="Restauration complète à partir d'un .json.")
 async def total_restore(interaction: discord.Interaction, fichier: discord.Attachment):
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /total_restore exécutée par {interaction.user.name} sur {interaction.guild.name}")
     if not verifier_permissions_staff(interaction.user):
         await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
         return
-
     await interaction.response.defer(ephemeral=True)
-
     try:
-        contenu_bytes = await fichier.read()
-        donnees = json.loads(contenu_bytes.decode("utf-8"))
-
-        fichiers_disques = donnees.get("fichiers_disques", {})
-        for f_path, f_contenu in fichiers_disques.items():
-            with open(f_path, "w", encoding="utf-8") as f:
-                f.write(f_contenu)
-
+        donnees = json.loads((await fichier.read()).decode("utf-8"))
+        for f_path, f_contenu in donnees.get("fichiers_disques", {}).items():
+            with open(f_path, "w", encoding="utf-8") as f: f.write(f_contenu)
+        
         global missions_actives
         missions_actives.clear()
-        
-        m_actives_sauvegardees = donnees.get("missions_actives", {})
-        for str_g_id, j_dict in m_actives_sauvegardees.items():
+        for str_g_id, j_dict in donnees.get("missions_actives", {}).items():
             g_id = int(str_g_id)
             missions_actives[g_id] = {}
             guild_obj = bot.get_guild(g_id)
-            
             for str_j_id, m_data in j_dict.items():
-                j_id = int(str_j_id)
-                
-                old_channel_id = m_data["channel_id"]
-                target_channel = bot.get_channel(old_channel_id)
-                if not target_channel and guild_obj:
-                    target_channel = interaction.channel
-                
-                final_channel_id = target_channel.id if target_channel else old_channel_id
-
-                missions_actives[g_id][j_id] = {
-                    "texte": m_data["texte"],
-                    "delai_texte": m_data["delai_texte"],
+                old_chan = m_data["channel_id"]
+                target_chan = bot.get_channel(old_chan)
+                if not target_chan and guild_obj: target_chan = interaction.channel
+                missions_actives[g_id][int(str_j_id)] = {
+                    "texte": m_data["texte"], "delai_texte": m_data["delai_texte"],
                     "date_debut": datetime.fromisoformat(m_data["date_debut"]),
                     "date_fin": datetime.fromisoformat(m_data["date_fin"]),
                     "duree_totale": timedelta(seconds=m_data["duree_totale_seconds"]),
-                    "cat": m_data["cat"],
-                    "channel_id": final_channel_id,
-                    "alerte_moitie": m_data["alerte_moitie"],
-                    "alerte_un_quart": m_data["alerte_un_quart"],
+                    "cat": m_data["cat"], "channel_id": target_chan.id if target_chan else old_chan,
+                    "alerte_moitie": m_data["alerte_moitie"], "alerte_un_quart": m_data["alerte_un_quart"],
                     "en_attente": m_data["en_attente"]
                 }
-
-        await interaction.followup.send("✅ **Restauration réussie !** Les salons et les missions en cours ont été réassociés avec succès.", ephemeral=True)
-        await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Restauration totale effectuée avec succès sur {interaction.guild.name}.")
+        await interaction.followup.send("✅ Restauration totale effectuée avec succès !", ephemeral=True)
     except Exception as e:
-        await interaction.followup.send(f"❌ Erreur lors de la restauration du fichier : {e}", ephemeral=True)
-        await envoyer_log_proprietaire(bot, f"LOG ABSOLU - ERREUR Restauration totale sur {interaction.guild.name} : {e}")
+        await interaction.followup.send(f"❌ Erreur : {e}", ephemeral=True)
 
-@bot.tree.command(name="missions_en_cours", description="Affiche le statut de votre mission active.")
+@bot.tree.command(name="missions_en_cours", description="Affiche le statut de ta mission active.")
 async def missions_en_cours(interaction: discord.Interaction):
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /missions_en_cours exécutée par {interaction.user.name} sur {interaction.guild.name}")
-    joueur_id = interaction.user.id
     g_id = interaction.guild.id
-    if g_id not in missions_actives or joueur_id not in missions_actives[g_id]:
-        await interaction.response.send_message("White flag ⚪ Tu n'as nenhuma mission active actuellement sur ce serveur.", ephemeral=True)
+    if g_id not in missions_actives or interaction.user.id not in missions_actives[g_id]:
+        await interaction.response.send_message("⚪ Tu n'as aucune mission active actuellement.", ephemeral=True)
         return
-    m = missions_actives[g_id][joueur_id]
+    m = missions_actives[g_id][interaction.user.id]
     ts = int(m["date_fin"].timestamp())
     if m.get("en_attente", False):
-        await interaction.response.send_message(f"👤 <@{joueur_id}> [**{m['cat'].upper()}**] -> *\"{m['texte']}\"* 🛑 **GELÉ (En attente d'évaluation)**")
+        await interaction.response.send_message(f"👤 <@{interaction.user.id}> [**{m['cat'].upper()}**] -> *\"{m['texte']}\"* 🛑 **GELÉ (En attente d'évaluation)**", ephemeral=True)
     else:
-        await interaction.response.send_message(f"👤 <@{joueur_id}> [**{m['cat'].upper()}**] -> *\"{m['texte']}\"* Fin : <t:{ts}:R>")
+        await interaction.response.send_message(f"👤 <@{interaction.user.id}> [**{m['cat'].upper()}**] -> *\"{m['texte']}\"* Fin : <t:{ts}:R>", ephemeral=True)
 
 @bot.tree.command(name="missionaccomplie", description="Déclare l'objectif en cours comme accompli.")
 async def missionaccomplie(interaction: discord.Interaction):
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /missionaccomplie exécutée par {interaction.user.name} sur {interaction.guild.name}")
     joueur = interaction.user
     g_id = interaction.guild.id
     role_instructeur = discord.utils.get(interaction.guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]")
@@ -1370,226 +1099,91 @@ async def missionaccomplie(interaction: discord.Interaction):
             f"📢 {mention_ins} ! {joueur.mention} déclare avoir fini sa mission : *\"{m_info['texte']}\"* !\n"
             f"⏱️ **Le chrono est mis en pause.** Choisissez l'action appropriée :"
         )
-        await envoyer_double_notification(interaction.guild, msg_comp, f"📢 {mention_ins} — <@{joueur.id}> a fini sa mission : *\"{m_info['texte']}\"* dans {interaction.channel.mention}", view=VueEvaluationMission, joueur_id=joueur.id)
+        await envoyer_double_notification(interaction.guild, msg_comp, f"📢 {mention_ins} — <@{joueur.id}> a fini sa mission : *\"{m_info['texte']}\"* dans {interaction.channel.mention}", view=VueEvaluationMission(joueur.id), joueur_id=joueur.id)
         return
     await interaction.response.send_message("❌ Tu n'as aucune mission active en cours sur ce serveur.", ephemeral=True)
 
-@bot.tree.command(name="historique", description="Affiche l'historique de vos décrets passés.")
-@app_commands.describe(joueur="Le joueur dont vous voulez voir le casier.")
+@bot.tree.command(name="historique", description="Affiche l'historique des décrets.")
+@app_commands.describe(joueur="Le joueur")
 async def historique(interaction: discord.Interaction, joueur: discord.Member = None):
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /historique exécutée par {interaction.user.name} sur {interaction.guild.name}")
     cible = joueur or interaction.user
     profils = charger_profils(interaction.guild.id)
     initialiser_profil(cible.id, profils)
-    
     userData = profils[str(cible.id)]
+    embed = discord.Embed(title=f"📜 ARCHIVES — {cible.display_name}", color=discord.Color.blue())
+    embed.add_field(name="📊 Bilan", value=f"🟢 Réussites : `{userData['total_reussies']}`\n🔴 Échouées : `{userData['total_echouees']}`", inline=False)
     hist = userData["historique"]
-    
-    embed = discord.Embed(title=f"📜 ARCHIVES ET PARCHEMIN — {cible.display_name}", color=discord.Color.blue())
-    embed.set_thumbnail(url=cible.display_avatar.url)
-    embed.add_field(name="📊 Bilan des Objectifs", value=f"🟢 **RÉUSSITES :** `{userData['total_reussies']}`\n🔴 **ÉCHOUÉES :** `{userData['total_echouees']}`", inline=False)
-    
     if not hist:
-        embed.add_field(name="📜 Historique des Décrets", value="*Aucune mission enregistrée dans le grand registre.*", inline=False)
+        embed.add_field(name="📜 Historique", value="*Aucune mission enregistrée.*", inline=False)
     else:
-        hist_lignes = [("✅" if item["statut"] == "Succès" else "❌") + f" **[{item['date']}]** — {item['texte']}" for item in hist]
-        corps_historique = "\n".join(hist_lignes)
-        if len(corps_historique) > 1024: corps_historique = corps_historique[:1000] + "\n*...*"
-        embed.add_field(name="📜 Historique des Décrets", value=corps_historique, inline=False)
-        
+        corps = "\n".join([("✅" if i["statut"] == "Succès" else "❌") + f" **[{i['date']}]** — {i['texte']}" for i in hist[:10]])
+        embed.add_field(name="📜 Historique", value=corps, inline=False)
     await interaction.response.send_message(embed=embed)
 
-@bot.tree.command(name="mission_expiration", description="Avertit et planifie la suppression du ticket d'ordre s'il reste inactif pendant 1 heure.")
-@app_commands.describe(joueur="Le citoyen propriétaire du ticket d'ordre")
-async def mission_expiration(interaction: discord.Interaction, joueur: discord.Member):
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /mission_expiration exécutée par {interaction.user.name} pour {joueur.name} sur {interaction.guild.name}")
-    if not verifier_permissions_staff(interaction.user):
-        await interaction.response.send_message("❌ Tu n'as pas l'autorité nécessaire pour exécuter cette sentence.", ephemeral=True)
-        return
-    
-    g_id = interaction.guild.id
-    if g_id in missions_actives and joueur.id in missions_actives[g_id]:
-        await interaction.response.send_message("❌ Impossible de lancer l'expiration : une mission est déjà activement en cours pour ce joueur sur ce serveur.", ephemeral=True)
-        return
-
-    expiration_time = int((datetime.now() + timedelta(hours=1)).timestamp())
-    msg_alerte = (
-        f"⚠️ {joueur.mention}, **attention : cet ordre de mission va être supprimé <t:{expiration_time}:R> (<t:{expiration_time}:t>)** car aucune mission n'a été sélectionnée.\n"
-        f" Veuillez choisir un décret avant la fin du décompte réglementaire."
-    )
-    
-    await interaction.response.send_message("🚨 Alerte d'inactivité lancée. Le salon expirera dans une heure si aucune action n'est entreprise.")
-    await interaction.channel.send(msg_alerte)
-    
-    target_channel_id = interaction.channel.id
-    await asyncio.sleep(3600)
-    
-    if g_id not in missions_actives or joueur.id not in missions_actives[g_id]:
-        channel_to_del = bot.get_channel(target_channel_id)
-        if channel_to_del:
-            try:
-                await channel_to_del.delete(reason="Expiration de l'ordre de mission")
-                await envoyer_double_notification(interaction.guild, "", f"🗑️ Le ticket d'ordre de {joueur.mention} a été automatiquement supprimé pour inactivité.")
-                await envoyer_log_proprietaire(bot, f"LOG ABSOLU - EXPIRATION COMMANDE : Ticket supprimé automatiquement pour {joueur.name} sur {interaction.guild.name}")
-            except Exception as e:
-                await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Erreur suppression salon expiré : {e}")
-
-@bot.tree.command(name="tutoadm", description="Manuel réglementaire pour l'administration des ordres.")
-async def tutoadm(interaction: discord.Interaction):
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /tutoadm exécutée par {interaction.user.name} sur {interaction.guild.name}")
-    if not verifier_permissions_staff(interaction.user):
-        await interaction.response.send_message("❌ Tu n'as pas l'autorité nécessaire.", ephemeral=True)
-        return
-    embed_tuto = discord.Embed(
-        title="👑 MANUEL DE L'ADMINISTRATION & DE L'INSTRUCTION 👑",
-        description="Ce guide récapitule vos privilèges pour encadrer le système de missions de Valerius.",
-        color=discord.Color.red()
-    )
-    embed_tuto.add_field(
-        name="📥 1. Gestion des Demandes",
-        value="Lorsqu'un joueur finit son ordre, l'alerte dans `#validation-mission` et dans vos messages privés contient les boutons d'évaluation (`Accepter`, `Refuser`, `Demander des preuves`).",
-        inline=False
-    )
-    embed_tuto.add_field(
-        name="🛠️ 2. Commandes d'Urgence Manuelles",
-        value="`/openticket @joueur` -> Ouvrir un ticket pour un citoyen.\n`/fermerticket` -> Fermer instantanément un salon de ticket (et supprimer sa mission active).\n`/attribuer_mission` -> Assigner une mission auto.\n`/export_actives` & `/import_actives` -> Sauvegarder/Recharger les missions en cours.\n`/total_backup` & `/total_restore` -> Sauvegarder/Restaurer tout le bot.\n`/missionaccepter` -> Clôture en Succès.\n`/missionrefuser` -> Clôture en Échec.\n`/missionpreuve` -> Réouvre le salon pour screen.\n`/resetmissions` -> Supprimer TOUTES les missions de ce serveur.",
-        inline=False
-    )
-    await interaction.response.send_message(embed_tuto, ephemeral=True)
-
-@bot.tree.command(name="missionaccepter", description="Valide et force manuellement le succès de la mission d'un joueur.")
-@app_commands.describe(joueur="Le citoyen à valider")
+@bot.tree.command(name="missionaccepter", description="Valide manuellement la mission d'un joueur (Staff).")
+@app_commands.describe(joueur="Le citoyen")
 async def missionaccepter(interaction: discord.Interaction, joueur: discord.Member):
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /missionaccepter exécutée par {interaction.user.name} pour {joueur.name} sur {interaction.guild.name}")
     if not verifier_permissions_staff(interaction.user):
         await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
         return
     await interaction.response.defer()
-    reussite = await action_accepter_mission(joueur.id, interaction.channel)
-    if reussite:
-        await interaction.followup.send(f"✅ Mission de {joueur.mention} acceptée manuellement.")
+    if await action_accepter_mission(joueur.id, interaction.channel):
+        await interaction.followup.send(f"✅ Mission de {joueur.mention} acceptée.")
     else:
-        await interaction.followup.send("❌ Ce joueur n'a aucune mission active sur ce serveur.")
+        await interaction.followup.send("❌ Ce joueur n'a pas de mission active.")
 
-@bot.tree.command(name="missionrefuser", description="Force manuellement l'échec de la mission d'un joueur.")
-@app_commands.describe(joueur="Le citoyen à pénaliser")
+@bot.tree.command(name="missionrefuser", description="Refuse manuellement la mission d'un joueur (Staff).")
+@app_commands.describe(joueur="Le citoyen")
 async def missionrefuser(interaction: discord.Interaction, joueur: discord.Member):
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /missionrefuser exécutée par {interaction.user.name} pour {joueur.name} sur {interaction.guild.name}")
     if not verifier_permissions_staff(interaction.user):
         await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
         return
     await interaction.response.defer()
-    reussite = await action_refuser_mission(joueur.id, interaction.channel)
-    if reussite:
-        await interaction.followup.send(f"❌ Mission de {joueur.mention} refusée avec échec consigné.")
+    if await action_refuser_mission(joueur.id, interaction.channel):
+        await interaction.followup.send(f"❌ Mission de {joueur.mention} refusée.")
     else:
-        await interaction.followup.send("❌ Ce joueur n'a aucune mission active sur ce serveur.")
+        await interaction.followup.send("❌ Ce joueur n'a pas de mission active.")
 
-@bot.tree.command(name="missionpreuve", description="Exige l'envoi d'une capture d'écran de preuve dans le ticket.")
-@app_commands.describe(joueur="Le citoyen ciblé")
+@bot.tree.command(name="missionpreuve", description="Exige une preuve au joueur (Staff).")
+@app_commands.describe(joueur="Le citoyen")
 async def missionpreuve(interaction: discord.Interaction, joueur: discord.Member):
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /missionpreuve exécutée par {interaction.user.name} pour {joueur.name} sur {interaction.guild.name}")
     if not verifier_permissions_staff(interaction.user):
         await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
         return
     await interaction.response.defer()
-    reussite = await action_demander_preuve(joueur.id, interaction.channel, interaction.guild)
-    if reussite:
+    if await action_demander_preuve(joueur.id, interaction.channel, interaction.guild):
         await interaction.followup.send(f"📸 Demande de preuve transmise à {joueur.mention}.")
     else:
-        await interaction.followup.send("❌ Ce joueur n'a aucune mission active sur ce serveur.")
+        await interaction.followup.send("❌ Ce joueur n'a pas de mission active.")
 
-@bot.tree.command(name="resetmissions", description="Supprime et vide définitivement toutes les missions de ce serveur.")
-async def resetmissions(interaction: discord.Interaction):
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /resetmissions exécutée par {interaction.user.name} sur {interaction.guild.name}")
-    if not verifier_permissions_staff(interaction.user):
-        await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
-        return
-    vider_toutes_missions(interaction.guild.id)
-    await interaction.response.send_message("🗑️ **Toutes les missions de ce serveur ont été effacées avec succès !**", ephemeral=True)
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Suppression totale via slash command sur le serveur {interaction.guild.name}.")
-
-@bot.tree.command(name="listemissions", description="Affiche l'index complet du catalogue des décrets.")
+@bot.tree.command(name="listemissions", description="Liste les missions (Staff).")
 async def listemissions(interaction: discord.Interaction):
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /listemissions exécutée par {interaction.user.name} sur {interaction.guild.name}")
     if not verifier_permissions_staff(interaction.user):
         await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
         return
-
     missions_dispo = charger_missions_fichier(interaction.guild.id)
-    lignes = ["⚜️ **ARCHIVES DES MISSIONS DISPONIBLES (SUR CE SERVEUR)** ⚜️\n"]
-    
+    texte = "⚜️ **CATALOGUE DES MISSIONS** ⚜️\n"
     for cat in ["commune", "moyenne", "difficile", "royal"]:
-        lignes.append(f"\n__**{cat.upper()} :**__\n")
-        if not missions_dispo[cat]:
-            lignes.append("*Aucune mission disponible*\n")
-        else:
-            for i, m in enumerate(missions_dispo[cat], start=1):
-                lignes.append(f"**{i}.** {m['texte']} *(Délai : {m['delai']})*\n")
-    
-    messages = []
-    message_actuel = ""
-    for ligne in lignes:
-        if len(message_actuel) + len(ligne) > 1900:
-            messages.append(message_actuel)
-            message_actuel = ligne
-        else:
-            message_actuel += ligne
-            
-    if message_actuel:
-        messages.append(message_actuel)
-        
-    await interaction.response.send_message(messages[0], ephemeral=True)
-    for msg in messages[1:]:
-        await interaction.followup.send(msg, ephemeral=True)
+        texte += f"\n__**{cat.upper()}**__\n"
+        for i, m in enumerate(missions_dispo[cat], 1):
+            texte += f"**{i}.** {m['texte']} ({m['delai']})\n"
+    if len(texte) > 1900: texte = texte[:1900] + "\n..."
+    await interaction.response.send_message(texte, ephemeral=True)
 
-@bot.tree.command(name="addmission", description="Ajoute une nouvelle quête au catalogue global du serveur.")
-@app_commands.describe(categorie="commune, moyenne, difficile, royal", texte="Contenu de l'objectif", temps="Exemple: 2h, 3j, 45min")
+@bot.tree.command(name="addmission", description="Ajoute une mission (Staff).")
+@app_commands.describe(categorie="commune, moyenne, difficile, royal", texte="Objectif", temps="ex: 3 jours")
 async def addmission(interaction: discord.Interaction, categorie: str, texte: str, temps: str):
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /addmission exécutée par {interaction.user.name} ({categorie} : {texte}) sur {interaction.guild.name}")
     if not verifier_permissions_staff(interaction.user):
         await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
         return
     cat = categorie.lower().strip()
-    if cat in ["commune", "commun"]: cat = "commune"
-    elif cat in ["moyenne", "moyen"]: cat = "moyenne"
-    elif cat in ["difficile"]: cat = "difficile"
-    elif cat in ["royal", "royale"]: cat = "royal"
-    else:
+    if cat not in ["commune", "moyenne", "difficile", "royal"]:
         await interaction.response.send_message("❌ Catégorie invalide.", ephemeral=True)
         return
-    
     sauvegarder_mission_fichier(interaction.guild.id, cat, texte, temps)
-    await interaction.response.send_message(f"⚜️ **Mission ajoutée pour ce serveur !** (`{cat}` : *{texte}* pendant {temps})")
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Ajout réussi d'une mission sur {interaction.guild.name} ({cat} : {texte})")
-
-@bot.tree.command(name="delmission", description="Supprime une mission existante du fichier de configuration.")
-@app_commands.describe(categorie="commune, moyenne, difficile, royal", numero="Le numéro affiché sur le /listemissions")
-async def delmission(interaction: discord.Interaction, categorie: str, numero: int):
-    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Commande /delmission exécutée par {interaction.user.name} ({categorie} n°{numero}) sur {interaction.guild.name}")
-    if not verifier_permissions_staff(interaction.user):
-        await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
-        return
-    cat = categorie.lower().strip()
-    if cat in ["commune", "commun"]: cat = "commune"
-    elif cat in ["moyenne", "moyen"]: cat = "moyenne"
-    elif cat in ["difficile"]: cat = "difficile"
-    elif cat in ["royal", "royale"]: cat = "royal"
-    
-    index = numero - 1
-    guild_id = interaction.guild.id
-    missions_dispo = charger_missions_fichier(guild_id)
-    if cat in missions_dispo and 0 <= index < len(missions_dispo[cat]):
-        retiree = missions_dispo[cat].pop(index)
-        réécrire_toutes_missions(guild_id, missions_dispo)
-        await interaction.response.send_message(f"🗑️ Mission *\"{retiree['texte']}\"* supprimée de l'index de ce serveur.")
-        await envoyer_log_proprietaire(bot, f"LOG ABSOLU - Suppression réussie d'une mission sur {interaction.guild.name} ({retiree['texte']})")
-    else:
-        await interaction.response.send_message("❌ Numéro introuvable dans cette catégorie.", ephemeral=True)
+    await interaction.response.send_message(f"✅ Mission ajoutée dans `{cat}` : *{texte}* ({temps})", ephemeral=True)
 
 keep_alive()
 token = os.environ.get("DISCORD_TOKEN")
-if token:
-    bot.run(token)
-else:
-    print("Erreur : Aucun token Discord trouvé.")
+if token: bot.run(token)
+else: print("Erreur : Aucun token Discord trouvé.")
