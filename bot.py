@@ -274,7 +274,8 @@ class VueGestionJoueurMission(discord.ui.View):
         if member_obj:
             await interaction.channel.set_permissions(member_obj, read_messages=True, send_messages=False)
         
-        await interaction.channel.send(f"💬 <@{target_id>>, un instructeur a été notifié. Votre demande va être traitée dans les plus brefs délais.")
+        # CORRECTION DE LA SYNTAXE ICI : la virgule est sortie des accolades
+        await interaction.channel.send(f"💬 <@{target_id}>, un instructeur a été notifié. Votre demande va être traitée dans les plus brefs délais.")
         
         msg_fin = (
             f"📢 {mention_ins} ! <@{target_id}> déclare avoir fini sa mission via l'interface : *\"{m_info['texte']}\"* !\n"
