@@ -194,15 +194,16 @@ class VueAccueilArrivant(discord.ui.View):
         salon_cible = interaction.guild.get_channel(SALON_PALAIS_ROYAL_ID)
         
         mention_role = role_palais.mention if role_palais else "@[ Palais Royal ]"
+        utilisateur = interaction.user
         
         if salon_cible:
             try:
-                await salon_cible.send(f"🚨 {mention_role} ! Un membre s'identifie en tant que Greyjoy.")
+                await salon_cible.send(f"🚨 {mention_role} ! Le membre {utilisateur.mention} ({utilisateur.name}) s'identifie en tant que Greyjoy.")
                 await interaction.response.send_message(f"✅ Un haut gradé a été prévenu dans le salon {salon_cible.mention} !", ephemeral=True)
             except Exception as e:
                 await interaction.response.send_message(f"❌ Erreur lors de l'envoi du message dans le salon dédié : {e}", ephemeral=True)
         else:
-            await interaction.response.send_message(f"🚨 Un haut gradé a été ping : {mention_role} ! Un membre s'identifie en tant que Greyjoy. (Salon cible introuvable par ID)", ephemeral=True)
+            await interaction.response.send_message(f"🚨 Un haut gradé a été ping : {mention_role} ! Le membre {utilisateur.mention} ({utilisateur.name}) s'identifie en tant que Greyjoy. (Salon cible introuvable par ID)", ephemeral=True)
 
     @discord.ui.button(label="👤 Je suis un visiteurs", style=discord.ButtonStyle.secondary, custom_id="btn_visiteur")
     async def visiteur_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -230,7 +231,7 @@ class VueAccueilArrivant(discord.ui.View):
             
             if salon_attente:
                 await salon_attente.set_permissions(interaction.user, read_messages=True, send_messages=True, connect=True)
-                await interaction.response.send_message(f"✅ Tu as obtenu le rôle **en cours de recrutement** et l'accès au salon {salon_attente.mention} !", ephemeral=True)
+                await interaction.response.send_message(f"✅ Tu hai obtenu le rôle **en cours de recrutement** et l'accès au salon {salon_attente.mention} !", ephemeral=True)
             else:
                 await interaction.response.send_message("✅ Rôle attribué, mais le salon `attente moov` est introuvable avec cet ID.", ephemeral=True)
         except Exception as e:
