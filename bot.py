@@ -1,6 +1,4 @@
- token Discord trouvé.")import discord
-from discord.ext import commands, tasks
-from discord import app_commands
+import discord
 import random
 import os
 import json
