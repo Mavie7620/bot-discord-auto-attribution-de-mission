@@ -520,7 +520,7 @@ async def action_demander_preuve(joueur_id, channel, guild):
         role_instructeur = discord.utils.get(guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]")
         mention_ins = role_instructeur.mention if role_instructeur else "@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]"
         
-        msg_ticket = f"⚠️ <@{joueur_id}>, **{mention_ins} veuillez nous fournir une preuve de l'accomplissement de votre mission.**"
+        msg_ticket = f"⚠️ <@{joueur_id}>, **{mention_ins} veuillez nous fournir une preuve de l'accomplissement de votre mission (veuillez envoyer une image ou une photo valide).**"
         msg_log_missions = f"📸 {mention_ins} — Une demande de preuve a été envoyée à <@{joueur_id}> dans son ticket {channel.mention}.\nMerci de valider ou refuser ci-dessous une fois la preuve examinée :"
         
         await channel.send(msg_ticket)
@@ -973,9 +973,35 @@ async def on_message(message):
         joueur_id = message.author.id
         g_id = message.guild.id
         if g_id in missions_actives and joueur_id in missions_actives[g_id] and missions_actives[g_id][joueur_id].get("en_attente", False):
-            await message.channel.send(f"💬 <@{joueur_id}>, un instructeur a été ping. Votre demande a bien été envoyée et va être traitée.")
-            msg_p = f"📸 **Preuve reçue** pour la mission de <@{joueur_id}>. En attente de l'analyse finale de l'administration :"
-            await envoyer_double_notification(message.guild, msg_p, f"📸 Preuve d'accomplissement déposée par <@{joueur_id}> dans {message.channel.mention}.", view=VueEvaluationMission(joueur_id), joueur_id=joueur_id)
+            # Vérification stricte : le message doit contenir au moins une image ou une pièce jointe photo
+            contient_image = False
+            
+            # Vérification des pièces jointes directes (fichiers uploadés)
+            if message.attachments:
+                for att in message.attachments:
+                    # On vérifie si le type MIME commence par 'image/' ou si l'extension est une image classique
+                    if att.content_type and att.content_type.startswith("image/"):
+                        contient_image = True
+                        break
+                    elif any(att.filename.lower().endswith(ext) for ext in ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp']):
+                        contient_image = True
+                        break
+            
+            # Vérification si le message intègre des embeds contenant des images (liens d'images intégrés)
+            if not contient_image and message.embeds:
+                for emb in message.embeds:
+                    if emb.image or emb.thumbnail:
+                        contient_image = True
+                        break
+
+            # Si le message contient une image, on déclenche l'envoi de la preuve aux instructeurs
+            if contient_image:
+                await message.channel.send(f"💬 <@{joueur_id}>, image/preuve bien reçue et transmise aux instructeurs !")
+                msg_p = f"📸 **Preuve reçue** pour la mission de <@{joueur_id}>. En attente de l'analyse finale de l'administration :"
+                await envoyer_double_notification(message.guild, msg_p, f"📸 Preuve d'accomplissement déposée par <@{joueur_id}> dans {message.channel.mention}.", view=VueEvaluationMission(joueur_id), joueur_id=joueur_id)
+            else:
+                # Si l'utilisateur envoie autre chose qu'une image (ex: du texte seul, un lien non image, etc.)
+                await message.channel.send(f"❌ <@{joueur_id}>, votre message n'a pas été validé comme preuve car **aucune image ni photo n'a été détectée**. Veuillez envoyer une capture d'écran ou une image valide pour que l'administration puisse l'analyser.")
 
 async def generer_panneau_aide(interaction: discord.Interaction):
     embed = discord.Embed(title="⚜️ TABLEAU DES ORDRES DE VALERIUS ⚜️", color=discord.Color.gold())
@@ -1562,6 +1588,7 @@ async def listemissions(interaction: discord.Interaction):
     message_actuel = ""
     for ligne in lignes:
         if len(message_actuel) + len(ligne) > 1900:
+        ...
             messages.append(message_actuel)
             message_actuel = ligne
         else:
