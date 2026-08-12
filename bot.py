@@ -1,4 +1,4 @@
-import discord
+ token Discord trouvé.")import discord
 from discord.ext import commands, tasks
 from discord import app_commands
 import random
@@ -973,13 +973,10 @@ async def on_message(message):
         joueur_id = message.author.id
         g_id = message.guild.id
         if g_id in missions_actives and joueur_id in missions_actives[g_id] and missions_actives[g_id][joueur_id].get("en_attente", False):
-            # Vérification stricte : le message doit contenir au moins une image ou une pièce jointe photo
             contient_image = False
             
-            # Vérification des pièces jointes directes (fichiers uploadés)
             if message.attachments:
                 for att in message.attachments:
-                    # On vérifie si le type MIME commence par 'image/' ou si l'extension est une image classique
                     if att.content_type and att.content_type.startswith("image/"):
                         contient_image = True
                         break
@@ -987,20 +984,17 @@ async def on_message(message):
                         contient_image = True
                         break
             
-            # Vérification si le message intègre des embeds contenant des images (liens d'images intégrés)
             if not contient_image and message.embeds:
                 for emb in message.embeds:
                     if emb.image or emb.thumbnail:
                         contient_image = True
                         break
 
-            # Si le message contient une image, on déclenche l'envoi de la preuve aux instructeurs
             if contient_image:
                 await message.channel.send(f"💬 <@{joueur_id}>, image/preuve bien reçue et transmise aux instructeurs !")
                 msg_p = f"📸 **Preuve reçue** pour la mission de <@{joueur_id}>. En attente de l'analyse finale de l'administration :"
                 await envoyer_double_notification(message.guild, msg_p, f"📸 Preuve d'accomplissement déposée par <@{joueur_id}> dans {message.channel.mention}.", view=VueEvaluationMission(joueur_id), joueur_id=joueur_id)
             else:
-                # Si l'utilisateur envoie autre chose qu'une image (ex: du texte seul, un lien non image, etc.)
                 await message.channel.send(f"❌ <@{joueur_id}>, votre message n'a pas été validé comme preuve car **aucune image ni photo n'a été détectée**. Veuillez envoyer une capture d'écran ou une image valide pour que l'administration puisse l'analyser.")
 
 async def generer_panneau_aide(interaction: discord.Interaction):
@@ -1588,7 +1582,6 @@ async def listemissions(interaction: discord.Interaction):
     message_actuel = ""
     for ligne in lignes:
         if len(message_actuel) + len(ligne) > 1900:
-        ...
             messages.append(message_actuel)
             message_actuel = ligne
         else:
