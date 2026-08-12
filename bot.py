@@ -29,6 +29,7 @@ PROPRIETAIRE_ID = 1109866808321769472
 WELCOME_CHANNEL_ID = 1534604841660190792
 ATTENTE_MOOV_ID = 1534604587992875280
 SALON_PALAIS_ROYAL_ID = 1519322938430722129
+SALON_VALIDATION_MISSION_ID = 1534638388286853273
 
 def get_file_name(guild_id):
     return f"valerius_missions_{guild_id}.txt"
@@ -141,7 +142,7 @@ async def envoyer_log_proprietaire(bot_instance, texte_log, view=None, guild_tar
     print(f"[LOG GLOBAL ABSOLU CONSOLE] {texte_log}")
 
 async def envoyer_double_notification(guild, msg_ticket, msg_missions, view=None, joueur_id=None):
-    salon_missions = discord.utils.get(guild.text_channels, name="validation-mission")
+    salon_missions = guild.get_channel(SALON_VALIDATION_MISSION_ID) or discord.utils.get(guild.text_channels, name="validation-mission")
     if salon_missions:
         try: await salon_missions.send(msg_missions, view=view(joueur_id) if view and joueur_id else view)
         except: pass
@@ -231,7 +232,7 @@ class VueAccueilArrivant(discord.ui.View):
             
             if salon_attente:
                 await salon_attente.set_permissions(interaction.user, read_messages=True, send_messages=True, connect=True)
-                await interaction.response.send_message(f"✅ Tu hai obtenu le rôle **en cours de recrutement** et l'accès au salon {salon_attente.mention} !", ephemeral=True)
+                await interaction.response.send_message(f"✅ Tu as obtenu le rôle **en cours de recrutement** et l'accès au salon {salon_attente.mention} !", ephemeral=True)
             else:
                 await interaction.response.send_message("✅ Rôle attribué, mais le salon `attente moov` est introuvable avec cet ID.", ephemeral=True)
         except Exception as e:
@@ -422,7 +423,7 @@ class VueEvaluationMissionMP(discord.ui.View):
         if self.guild_target and self.guild_target.id in missions_actives and self.joueur_id in missions_actives[self.guild_target.id]:
             chan_cible = bot.get_channel(missions_actives[self.guild_target.id][self.joueur_id]["channel_id"])
         if not chan_cible and self.guild_target:
-            chan_cible = discord.utils.get(self.guild_target.text_channels, name="validation-mission")
+            chan_cible = self.guild_target.get_channel(SALON_VALIDATION_MISSION_ID) or discord.utils.get(self.guild_target.text_channels, name="validation-mission")
         
         if chan_cible:
             await action_accepter_mission(self.joueur_id, chan_cible)
@@ -440,7 +441,7 @@ class VueEvaluationMissionMP(discord.ui.View):
         if self.guild_target and self.guild_target.id in missions_actives and self.joueur_id in missions_actives[self.guild_target.id]:
             chan_cible = bot.get_channel(missions_actives[self.guild_target.id][self.joueur_id]["channel_id"])
         if not chan_cible and self.guild_target:
-            chan_cible = discord.utils.get(self.guild_target.text_channels, name="validation-mission")
+            chan_cible = self.guild_target.get_channel(SALON_VALIDATION_MISSION_ID) or discord.utils.get(self.guild_target.text_channels, name="validation-mission")
         
         if chan_cible:
             await action_refuser_mission(self.joueur_id, chan_cible)
@@ -476,7 +477,7 @@ async def action_accepter_mission(joueur_id, channel):
         sauvegarder_profils(g_id, profils)
         del missions_actives[g_id][joueur_id]
         
-        msg = "✅ **Mission Validée** ! L'objectif est consigné comme réussi dans le grand registre.\n\n🚚 **Un instructeur vas venir récupéré le butin.**"
+        msg = "✅ **Mission Validée** ! L'objectif est consigné comme réussi dans le grand registre.\n\n🚚 **Un instructeur va venir récupérer le butin.**"
         await channel.send(msg, view=VueButinRecupere())
         await envoyer_double_notification(guild, msg, f"✅ **Mission accomplie** par <@{joueur_id}> : *\"{m_info['texte']}\"*", joueur_id=joueur_id)
         await envoyer_log_proprietaire(bot, f"LOG ABSOLU - ACTION ACCEPTER MISSION : Joueur {joueur_id} validé sur {guild.name}")
