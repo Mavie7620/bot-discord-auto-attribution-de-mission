@@ -87,12 +87,13 @@ def initialiser_profil(p_id, profils):
             "historique": []
         }
 
-def ajouter_historique(p_id, profils, texte, statut):
+def ajouter_historique(p_id, profils, texte, statut, cat="inconnu"):
     s_id = str(p_id)
     initialiser_profil(p_id, profils)
     profils[s_id]["historique"].insert(0, {
         "texte": texte,
         "statut": statut,
+        "categorie": cat,
         "date": datetime.now().strftime("%d/%m/%Y à %H:%M")
     })
 
@@ -476,7 +477,7 @@ async def action_accepter_mission(joueur_id, channel):
         profils = charger_profils(g_id)
         initialiser_profil(joueur_id, profils)
         profils[str(joueur_id)]["total_reussies"] += 1
-        ajouter_historique(joueur_id, profils, m_info["texte"], "Succès")
+        ajouter_historique(joueur_id, profils, m_info["texte"], "Succès", m_info["cat"])
         sauvegarder_profils(g_id, profils)
         del missions_actives[g_id][joueur_id]
         
@@ -495,7 +496,7 @@ async def action_refuser_mission(joueur_id, channel):
         profils = charger_profils(g_id)
         initialiser_profil(joueur_id, profils)
         profils[str(joueur_id)]["total_echouees"] += 1
-        ajouter_historique(joueur_id, profils, m_info["texte"], "Échec")
+        ajouter_historique(joueur_id, profils, m_info["texte"], "Échec", m_info["cat"])
         sauvegarder_profils(g_id, profils)
         del missions_actives[g_id][joueur_id]
         
@@ -583,7 +584,7 @@ async def verifier_temps_missions():
                 profils = charger_profils(guild_id)
                 initialiser_profil(joueur_id, profils)
                 profils[str(joueur_id)]["total_echouees"] += 1
-                ajouter_historique(joueur_id, profils, m_info["texte"], "Échec")
+                ajouter_historique(joueur_id, profils, m_info["texte"], "Échec", m_info["cat"])
                 sauvegarder_profils(guild_id, profils)
 
                 role_instructeur = discord.utils.get(guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]")
@@ -1395,7 +1396,12 @@ async def historique(interaction: discord.Interaction, joueur: discord.Member = 
     if not hist:
         embed.add_field(name="📜 Historique des Décrets", value="*Aucune mission enregistrée dans le grand registre.*", inline=False)
     else:
-        hist_lignes = [("✅" if item["statut"] == "Succès" else "❌") + f" **[{item['date']}]** — {item['texte']}" for item in hist]
+        hist_lignes = []
+        for item in hist:
+            icone = "✅" if item["statut"] == "Succès" else "❌"
+            cat_nom = item.get("categorie", "inconnu").upper()
+            hist_lignes.append(f"{icone} **[{item['date']}]** `[{cat_nom}]` — {item['texte']}")
+            
         corps_historique = "\n".join(hist_lignes)
         if len(corps_historique) > 1024: corps_historique = corps_historique[:1000] + "\n*...*"
         embed.add_field(name="📜 Historique des Décrets", value=corps_historique, inline=False)
@@ -1403,12 +1409,18 @@ async def historique(interaction: discord.Interaction, joueur: discord.Member = 
     await interaction.response.send_message(embed=embed)
 
 @bot.tree.command(name="ajouterhistorique", description="Ajoute manuellement une mission dans l'historique et les compteurs d'un joueur.")
-@app_commands.describe(joueur="Le citoyen ciblé", statut="Succès ou Echec", texte="Description de la mission")
+@app_commands.describe(joueur="Le citoyen ciblé", statut="Succès ou Echec", categorie="commune, moyenne, difficile ou royal", texte="Description de la mission")
 @app_commands.choices(statut=[
     app_commands.Choice(name="Succès", value="Succès"),
     app_commands.Choice(name="Echec", value="Échec")
 ])
-async def ajouterhistorique(interaction: discord.Interaction, joueur: discord.Member, statut: str, texte: str):
+@app_commands.choices(categorie=[
+    app_commands.Choice(name="Commune", value="commune"),
+    app_commands.Choice(name="Moyenne", value="moyenne"),
+    app_commands.Choice(name="Difficile", value="difficile"),
+    app_commands.Choice(name="Royal", value="royal")
+])
+async def ajouterhistorique(interaction: discord.Interaction, joueur: discord.Member, statut: str, categorie: str, texte: str):
     if not verifier_permissions_staff(interaction.user):
         await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
         return
@@ -1422,10 +1434,10 @@ async def ajouterhistorique(interaction: discord.Interaction, joueur: discord.Me
     else:
         profils[str(joueur.id)]["total_echouees"] += 1
 
-    ajouter_historique(joueur.id, profils, texte, statut)
+    ajouter_historique(joueur.id, profils, texte, statut, categorie)
     sauvegarder_profils(g_id, profils)
 
-    await interaction.response.send_message(f"✅ Ajouté avec succès dans l'historique de {joueur.mention} !\nStatut : **{statut}** — *{texte}*", ephemeral=True)
+    await interaction.response.send_message(f"✅ Ajouté avec succès dans l'historique de {joueur.mention} !\nStatut : **{statut}** | Catégorie : **{categorie.upper()}** — *{texte}*", ephemeral=True)
 
 @bot.tree.command(name="mission_expiration", description="Avertit et planifie la suppression du ticket d'ordre s'il reste inactif pendant 1 heure.")
 @app_commands.describe(joueur="Le citoyen propriétaire du ticket d'ordre")
@@ -1477,7 +1489,7 @@ async def tutoadm(interaction: discord.Interaction):
     )
     embed_tuto.add_field(
         name="🛠️ 2. Commandes d'Urgence Manuelles",
-        value="`/openticket @joueur` -> Ouvrir un ticket\n`/fermerticket` -> Fermer instantanément un salon de ticket\n`/attribuer_mission` -> Assigner une mission auto\n`/ajouterhistorique @joueur [Succès/Echec] [texte]` -> Ajouter une mission à l'historique\n`/export_actives` & `/import_actives` -> Sauvegarder/Recharger les missions en cours\n`/total_backup` & `/total_restore` -> Sauvegarder/Restaurer tout le bot\n`/missionaccepter` / `/missionrefuser` / `/missionpreuve`",
+        value="`/openticket @joueur` -> Ouvrir un ticket\n`/fermerticket` -> Fermer instantanément un salon de ticket\n`/attribuer_mission` -> Assigner une mission auto\n`/ajouterhistorique @joueur [Succès/Echec] [catégorie] [texte]` -> Ajouter une mission à l'historique\n`/export_actives` & `/import_actives` -> Sauvegarder/Recharger les missions en cours\n`/total_backup` & `/total_restore` -> Sauvegarder/Restaurer tout le bot\n`/missionaccepter` / `/missionrefuser` / `/missionpreuve`",
         inline=False
     )
     await interaction.response.send_message(embed=embed_tuto, ephemeral=True)
