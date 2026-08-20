@@ -1637,4 +1637,4 @@ token = os.environ.get("DISCORD_TOKEN")
 if token:
     bot.run(token)
 else:
-    print("Erreur : Aucun token Discord
+    print("Erreur : Aucun token Discord")
