@@ -1,4 +1,5 @@
 import discord
+from discord.ext import commands, tasks
 import random
 import os
 import json
@@ -552,7 +553,7 @@ async def gerer_expiration_automatique(guild, channel_id, joueur_id):
                 try:
                     await channel_final.delete(reason="Expiration de l'ordre de mission")
                     await envoyer_double_notification(guild, "", f"🗑️ Le ticket d'ordre de {mention_joueur} a été supprimé automatiquement pour inactivité.")
-                    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - EXPIRATION AUTO : Ticket de {joueur_id} supprimé pour inactivité sur {guild.name}")
+                    await envoyer_log_proprietaire(bot, f"LOG ABSOLU - ERREUR EXPIRATION AUTO : Ticket de {joueur_id} supprimé pour inactivité sur {guild.name}")
                 except Exception as e:
                     await envoyer_log_proprietaire(bot, f"LOG ABSOLU - ERREUR EXPIRATION AUTO : {e}")
 
