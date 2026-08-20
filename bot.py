@@ -1,7 +1,4 @@
-import discord
-from discord import app_commands
-from discord.ext import tasks
-from discord.ext import commands
+Import discord
 import random
 import os
 import json
@@ -1475,10 +1472,169 @@ async def mission_expiration(interaction: discord.Interaction, joueur: discord.M
     expiration_time = int((datetime.now() + timedelta(hours=1)).timestamp())
     msg_alerte = (
         f"⚠️ {joueur.mention}, **attention : cet ordre de mission va être supprimé <t:{expiration_time}:R> (<t:{expiration_time}:t>)** car aucune mission n'a été sélectionnée.\n"
-        f" Veuillez choisir un décret avant la fin du décompte !"
+        f" Veuillez choisir un décret avant la fin du décompte réglementaire."
     )
-    await interaction.response.send_message(msg_alerte)
+    
+    await interaction.response.send_message("🚨 Alerte d'inactivité lancée. Le salon expirera dans une heure si aucune action n'est entreprise.")
+    await interaction.channel.send(msg_alerte)
+    
+    target_channel_id = interaction.channel.id
+    await asyncio.sleep(3600)
+    
+    if g_id not in missions_actives or joueur.id not in missions_actives[g_id]:
+        channel_to_del = bot.get_channel(target_channel_id)
+        if channel_to_del:
+            try:
+                await channel_to_del.delete(reason="Expiration de l'ordre de mission")
+                await envoyer_double_notification(interaction.guild, "", f"🗑️ Le ticket d'ordre de {joueur.mention} a été automatiquement supprimé pour inactivité.")
+            except Exception as e:
+                print(f"Erreur suppression salon expiré: {e}")
 
-# Lancement du bot (assure-toi de remplacer par ton propre token)
+@bot.tree.command(name="tutoadm", description="Manuel réglementaire pour l'administration des ordres.")
+async def tutoadm(interaction: discord.Interaction):
+    if not verifier_permissions_staff(interaction.user):
+        await interaction.response.send_message("❌ Tu n'as pas l'autorité nécessaire.", ephemeral=True)
+        return
+    embed_tuto = discord.Embed(
+        title="👑 MANUEL DE L'ADMINISTRATION & DE L'INSTRUCTION 👑",
+        description="Ce guide récapitule vos privilèges pour encadrer le système de missions de Valerius.",
+        color=discord.Color.red()
+    )
+    embed_tuto.add_field(
+        name="📥 1. Gestion des Demandes",
+        value="Lorsqu'un joueur finit son ordre, l'alerte dans `#validation-mission` et dans vos messages privés contient les boutons d'évaluation (`Accepter`, `Refuser`, `Demander des preuves`).",
+        inline=False
+    )
+    embed_tuto.add_field(
+        name="🛠️ 2. Commandes d'Urgence Manuelles",
+        value="`/openticket @joueur` -> Ouvrir un ticket\n`/fermerticket` -> Fermer instantanément un salon de ticket\n`/attribuer_mission` -> Assigner une mission auto\n`/ajouterhistorique @joueur [Succès/Echec] [catégorie] [texte]` -> Ajouter une mission à l'historique\n`/export_actives` & `/import_actives` -> Sauvegarder/Recharger les missions en cours\n`/total_backup` & `/total_restore` -> Sauvegarder/Restaurer tout le bot\n`/missionaccepter` / `/missionrefuser` / `/missionpreuve`",
+        inline=False
+    )
+    await interaction.response.send_message(embed=embed_tuto, ephemeral=True)
+
+@bot.tree.command(name="missionaccepter", description="Valide et force manuellement le succès de la mission d'un joueur.")
+@app_commands.describe(joueur="Le citoyen à valider")
+async def missionaccepter(interaction: discord.Interaction, joueur: discord.Member):
+    if not verifier_permissions_staff(interaction.user):
+        await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
+        return
+    await interaction.response.defer()
+    reussite = await action_accepter_mission(joueur.id, interaction.channel)
+    if reussite:
+        await interaction.followup.send(f"✅ Mission de {joueur.mention} acceptée manuellement.")
+    else:
+        await interaction.followup.send("❌ Ce joueur n'a aucune mission active sur ce serveur.")
+
+@bot.tree.command(name="missionrefuser", description="Force manuellement l'échec de la mission d'un joueur.")
+@app_commands.describe(joueur="Le citoyen à pénaliser")
+async def missionrefuser(interaction: discord.Interaction, joueur: discord.Member):
+    if not verifier_permissions_staff(interaction.user):
+        await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
+        return
+    await interaction.response.defer()
+    reussite = await action_refuser_mission(joueur.id, interaction.channel)
+    if reussite:
+        await interaction.followup.send(f"❌ Mission de {joueur.mention} refusée avec échec consigné.")
+    else:
+        await interaction.followup.send("❌ Ce joueur n'a aucune mission active sur ce serveur.")
+
+@bot.tree.command(name="missionpreuve", description="Exige l'envoi d'une capture d'écran de preuve dans le ticket.")
+@app_commands.describe(joueur="Le citoyen ciblé")
+async def missionpreuve(interaction: discord.Interaction, joueur: discord.Member):
+    if not verifier_permissions_staff(interaction.user):
+        await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
+        return
+    await interaction.response.defer()
+    reussite = await action_demander_preuve(joueur.id, interaction.channel, interaction.guild)
+    if reussite:
+        await interaction.followup.send(f"📸 Demande de preuve transmise à {joueur.mention}.")
+    else:
+        await interaction.followup.send("❌ Ce joueur n'a aucune mission active sur ce serveur.")
+
+@bot.tree.command(name="resetmissions", description="Supprime et vide définitivement toutes les missions de ce serveur.")
+async def resetmissions(interaction: discord.Interaction):
+    if not verifier_permissions_staff(interaction.user):
+        await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
+        return
+    vider_toutes_missions(interaction.guild.id)
+    await interaction.response.send_message("🗑️ **Toutes les missions de ce serveur ont été effacées avec succès !**", ephemeral=True)
+
+@bot.tree.command(name="listemissions", description="Affiche l'index complet du catalogue des décrets.")
+async def listemissions(interaction: discord.Interaction):
+    if not verifier_permissions_staff(interaction.user):
+        await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
+        return
+
+    missions_dispo = charger_missions_fichier(interaction.guild.id)
+    lignes = ["⚜️ **ARCHIVES DES MISSIONS DISPONIBLES (SUR CE SERVEUR)** ⚜️\n"]
+    
+    for cat in ["commune", "moyenne", "difficile", "royal"]:
+        lignes.append(f"\n__**{cat.upper()} :**__\n")
+        if not missions_dispo[cat]:
+            lignes.append("*Aucune mission disponible*\n")
+        else:
+            for i, m in enumerate(missions_dispo[cat], start=1):
+                lignes.append(f"**{i}.** {m['texte']} *(Délai : {m['delai']})*\n")
+    
+    messages = []
+    message_actuel = ""
+    for ligne in lignes:
+        if len(message_actuel) + len(ligne) > 1900:
+            messages.append(message_actuel)
+            message_actuel = ligne
+        else:
+            message_actuel += ligne
+            
+    if message_actuel:
+        messages.append(message_actuel)
+        
+    await interaction.response.send_message(messages[0], ephemeral=True)
+    for msg in messages[1:]:
+        await interaction.followup.send(msg, ephemeral=True)
+
+@bot.tree.command(name="addmission", description="Ajoute une nouvelle quête au catalogue global du serveur.")
+@app_commands.describe(categorie="commune, moyenne, difficile, royal", texte="Contenu de l'objectif", temps="Exemple: 2h, 3j, 45min")
+async def addmission(interaction: discord.Interaction, categorie: str, texte: str, temps: str):
+    if not verifier_permissions_staff(interaction.user):
+        await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
+        return
+    cat = categorie.lower().strip()
+    if cat in ["commune", "commun"]: cat = "commune"
+    elif cat in ["moyenne", "moyen"]: cat = "moyenne"
+    elif cat in ["difficile"]: cat = "difficile"
+    elif cat in ["royal", "royale"]: cat = "royal"
+    else:
+        await interaction.response.send_message("❌ Catégorie invalide.", ephemeral=True)
+        return
+    
+    sauvegarder_mission_fichier(interaction.guild.id, cat, texte, temps)
+    await interaction.response.send_message(f"⚜️ **Mission ajoutée pour ce serveur !** (`{cat}` : *{texte}* pendant {temps})", ephemeral=True)
+
+@bot.tree.command(name="delmission", description="Supprime une mission existante du fichier de configuration.")
+@app_commands.describe(categorie="commune, moyenne, difficile, royal", numero="Le numéro affiché sur le /listemissions")
+async def delmission(interaction: discord.Interaction, categorie: str, numero: int):
+    if not verifier_permissions_staff(interaction.user):
+        await interaction.response.send_message("❌ Permission refusée.", ephemeral=True)
+        return
+    cat = categorie.lower().strip()
+    if cat in ["commune", "commun"]: cat = "commune"
+    elif cat in ["moyenne", "moyen"]: cat = "moyenne"
+    elif cat in ["difficile"]: cat = "difficile"
+    elif cat in ["royal", "royale"]: cat = "royal"
+    
+    index = numero - 1
+    guild_id = interaction.guild.id
+    missions_dispo = charger_missions_fichier(guild_id)
+    if cat in missions_dispo and 0 <= index < len(missions_dispo[cat]):
+        retiree = missions_dispo[cat].pop(index)
+        réécrire_toutes_missions(guild_id, missions_dispo)
+        await interaction.response.send_message(f"🗑️ Mission *\"{retiree['texte']}\"* supprimée de l'index de ce serveur.", ephemeral=True)
+    else:
+        await interaction.response.send_message("❌ Numéro introuvable dans cette catégorie.", ephemeral=True)
+
 keep_alive()
-bot.run("TON_TOKEN_DISCORD")
+token = os.environ.get("DISCORD_TOKEN")
+if token:
+    bot.run(token)
+else:
+    print("Erreur : Aucun token Discord
