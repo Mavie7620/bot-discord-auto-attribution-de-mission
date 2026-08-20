@@ -35,12 +35,12 @@ CONFIG_FILE = "valerius_config.json"
 
 def load_config():
     if not os.path.exists(CONFIG_FILE):
-        return {"verification_code": "maDaGa2026", "enabled": True}
+        return {"verification_code": "CODE1234", "enabled": True}
     try:
         with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     except:
-        return {"verification_code": "maDaGa2026", "enabled": True}
+        return {"verification_code": "CODE1234", "enabled": True}
 
 def save_config(config):
     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
@@ -129,6 +129,8 @@ TEXTE_ECHEC = (
 def verifier_permissions_staff(user):
     if user.id == PROPRIETAIRE_ID:
         return True
+    if not hasattr(user, "roles") or not hasattr(user, "guild_permissions"):
+        return False
     roles_noms = [r.name for r in user.roles]
     return user.guild_permissions.administrator or "[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]" in roles_noms or "[ Palais Royal ]" in roles_noms or "Palais Royal" in roles_noms or any(r.permissions.manage_channels or r.permissions.administrator for r in user.roles)
 
@@ -138,6 +140,8 @@ def verifier_acces_verifie(interaction: discord.Interaction):
         return True
     if interaction.user.id == PROPRIETAIRE_ID or verifier_permissions_staff(interaction.user):
         return True
+    if not interaction.guild:
+        return False
     role_verifie = discord.utils.get(interaction.guild.roles, name="Vérifié")
     if role_verifie and role_verifie in interaction.user.roles:
         return True
@@ -261,7 +265,9 @@ class VueGestionJoueurMission(discord.ui.View):
             m_info["moment_gel"] = datetime.now()
         for child in self.children: child.disabled = True
         try: await interaction.response.edit_message(view=self)
-        except: await interaction.response.defer(ephemeral=True)
+        except: 
+            if not interaction.response.is_done():
+                await interaction.response.defer(ephemeral=True)
 
         role_instructeur = discord.utils.get(interaction.guild.roles, name="[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]")
         mention_ins = role_instructeur.mention if role_instructeur else '@[ 𝔦𝔫𝔰𝔱𝔯𝔲𝔠𝖙𝔢𝖚🇷 ]'
@@ -289,7 +295,9 @@ class VueGestionJoueurMission(discord.ui.View):
             return
         for child in self.children: child.disabled = True
         try: await interaction.response.edit_message(view=self)
-        except: await interaction.response.defer(ephemeral=True)
+        except:
+            if not interaction.response.is_done():
+                await interaction.response.defer(ephemeral=True)
         await action_refuser_mission(target_id, interaction.channel)
 
 class VueEvaluationMission(discord.ui.View):
@@ -316,8 +324,13 @@ class VueEvaluationMission(discord.ui.View):
         if target_j_id and g_id in missions_actives and target_j_id in missions_actives[g_id]:
             c = bot.get_channel(missions_actives[g_id][target_j_id]["channel_id"])
             if c: chan_cible = c
-        if target_j_id: await action_accepter_mission(target_j_id, chan_cible)
-        else: await interaction.followup.send("❌ Joueur introuvable.", ephemeral=True)
+        if target_j_id: 
+            await action_accepter_mission(target_j_id, chan_cible)
+            if not interaction.response.is_done():
+                await interaction.response.send_message("✅ Mission acceptée.", ephemeral=True)
+        else: 
+            if not interaction.response.is_done():
+                await interaction.response.send_message("❌ Joueur introuvable.", ephemeral=True)
 
     @discord.ui.button(label="❌ Refuser", style=discord.ButtonStyle.danger, custom_id="eval_refuser")
     async def eval_refuser(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -338,8 +351,13 @@ class VueEvaluationMission(discord.ui.View):
         if target_j_id and g_id in missions_actives and target_j_id in missions_actives[g_id]:
             c = bot.get_channel(missions_actives[g_id][target_j_id]["channel_id"])
             if c: chan_cible = c
-        if target_j_id: await action_refuser_mission(target_j_id, chan_cible)
-        else: await interaction.followup.send("❌ Joueur introuvable.", ephemeral=True)
+        if target_j_id: 
+            await action_refuser_mission(target_j_id, chan_cible)
+            if not interaction.response.is_done():
+                await interaction.response.send_message("❌ Mission refusée.", ephemeral=True)
+        else: 
+            if not interaction.response.is_done():
+                await interaction.response.send_message("❌ Joueur introuvable.", ephemeral=True)
 
     @discord.ui.button(label="📸 Demander des preuves", style=discord.ButtonStyle.primary, custom_id="eval_preuve")
     async def eval_preuve(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -361,8 +379,13 @@ class VueEvaluationMission(discord.ui.View):
         if target_j_id and g_id in missions_actives and target_j_id in missions_actives[g_id]:
             c = bot.get_channel(missions_actives[g_id][target_j_id]["channel_id"])
             if c: chan_cible = c
-        if target_j_id: await action_demander_preuve(target_j_id, chan_cible, target_guild)
-        else: await interaction.followup.send("❌ Joueur introuvable.", ephemeral=True)
+        if target_j_id: 
+            await action_demander_preuve(target_j_id, chan_cible, target_guild)
+            if not interaction.response.is_done():
+                await interaction.response.send_message("📸 Preuve demandée.", ephemeral=True)
+        else: 
+            if not interaction.response.is_done():
+                await interaction.response.send_message("❌ Joueur introuvable.", ephemeral=True)
 
 class VueEvaluationMissionMP(discord.ui.View):
     def __init__(self, guild_target, joueur_id):
@@ -595,8 +618,6 @@ class VueChoixDifficulte(discord.ui.View):
     @discord.ui.button(label="🔴 Royal", style=discord.ButtonStyle.danger, custom_id="btn_royal")
     async def btn_royal(self, interaction: discord.Interaction, button: discord.ui.Button): await self.attribuer_mission_bouton(interaction, "royal")
 
-# --- COMMANDES SLASH POUR LA VÉRIFICATION ET LE CODE ---
-
 @bot.tree.command(name="verifier", description="Entre le code universel pour débloquer l'accès aux fonctionnalités du bot.")
 @app_commands.describe(code="Le code universel secret")
 async def verifier(interaction: discord.Interaction, code: str):
@@ -644,9 +665,6 @@ async def togglecode(interaction: discord.Interaction):
     etat = "activée" if config["enabled"] else "désactivée"
     await interaction.response.send_message(f"🔄 Le système de vérification par code est maintenant **{etat}**.", ephemeral=True)
 
-
-# --- EVENEMENT DE REDÉMARRAGE ET SYNCHRONISATION ---
-
 @bot.event
 async def on_ready():
     if not verifier_temps_missions.is_running(): verifier_temps_missions.start()
@@ -658,7 +676,6 @@ async def on_ready():
     bot.add_view(VueGestionJoueurMission())
     bot.add_view(VueEvaluationMission())
     
-    # Redemande le code sur TOUS les serveurs actifs à chaque redémarrage
     config = load_config()
     if config["enabled"]:
         for guild in bot.guilds:
@@ -721,8 +738,6 @@ async def on_message(message):
                 await envoyer_double_notification(message.guild, msg_p, f"📸 Preuve déposée par <@{joueur_id}> dans {message.channel.mention}.", view=VueEvaluationMission(joueur_id), joueur_id=joueur_id)
             else:
                 await message.channel.send(f"❌ <@{joueur_id}>, aucune image/photo détectée. Veuillez envoyer une capture valide.")
-
-# --- COMMANDES AVEC VÉRIFICATION DE SÉCURITÉ INTÉGRÉE ---
 
 @bot.tree.command(name="aide", description="Affiche le tableau de bord des quêtes de Valerius.")
 async def aide(interaction: discord.Interaction):
@@ -819,7 +834,6 @@ async def historique(interaction: discord.Interaction, joueur: discord.Member = 
         embed.add_field(name="📜 Historique", value=corps, inline=False)
     await interaction.response.send_message(embed=embed)
 
-# Commandes d'administration (Staff / Opener / Import / Export / etc.)
 @bot.tree.command(name="openticket", description="Ouvre un ticket de mission pour un citoyen (Staff).")
 @app_commands.describe(joueur="Le citoyen ciblé")
 async def openticket(interaction: discord.Interaction, joueur: discord.Member):
@@ -1037,6 +1051,5 @@ async def mission_expiration(interaction: discord.Interaction, joueur: discord.M
     expiration_time = int((datetime.now() + timedelta(hours=1)).timestamp())
     await interaction.response.send_message(f"⚠️ {joueur.mention}, cet ordre va expirer <t:{expiration_time}:R>.")
 
-# Lancement
 keep_alive()
 bot.run("TON_TOKEN_DISCORD")
