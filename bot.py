@@ -1033,7 +1033,7 @@ async def deverrouiller(interaction: discord.Interaction, code: str):
         await interaction.response.send_message("🔓 **Code accepté !** Valerius est désormais actif sur ce serveur.", ephemeral=True)
         await envoyer_log_proprietaire(bot, f"🔓 Déverrouillage réussi sur **{interaction.guild.name}** par {interaction.user}.")
     else:
-        await interaction.response.send_message("❌ **Code incorrect.** Sale clow, va dormir.", ephemeral=True)
+        await interaction.response.send_message("❌ **Code incorrect.** Sale clown, va dormir.", ephemeral=True)
         await envoyer_log_proprietaire(bot, f"⚠️ Tentative de code échouée sur **{interaction.guild.name}** par {interaction.user}.")
 
 @bot.tree.command(name="changer_code", description="Change le code d'activation global du bot (Admin/Propriétaire).")
