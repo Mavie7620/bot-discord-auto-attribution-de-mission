@@ -1808,3 +1808,4 @@ if token:
     bot.run(token)
 else:
     print("Erreur : Aucun token Discord")
+
