@@ -4,6 +4,7 @@ from discord import app_commands
 from discord.ext import commands, tasks
 import random
 import os
+import re
 import json
 import asyncio
 from threading import Thread
@@ -49,7 +50,9 @@ def charger_missions_fichier(guild_id):
         for line in f:
             line = line.strip()
             if not line or "|" not in line: continue
-            cat, texte, delai = line.split("|", 2)
+            parts = line.split("|", 2)
+            if len(parts) != 3: continue
+            cat, texte, delai = parts
             if cat in structure: structure[cat].append({"texte": texte, "delai": delai})
     return structure
 
@@ -99,16 +102,35 @@ def ajouter_historique(p_id, profils, texte, statut, cat="inconnu"):
     })
 
 def extraire_duree(delai_texte):
-    mots = delai_texte.lower().replace("pour dans", "").replace("pour", "").strip().split()
-    valeur = 1
-    for i, mot in enumerate(mots):
-        try: valeur = float(mots[i-1].replace(",", "."))
-        except (ValueError, IndexError): continue
-        if "min" in mot or "mn" in mot: return timedelta(minutes=valeur)
-        if "heure" in mot or "hour" in mot or "h" in mot: return timedelta(hours=valeur)
-        if "jour" in mot or "day" in mot or "j" in mot: return timedelta(days=valeur)
-        if "semaine" in mot or "week" in mot: return timedelta(weeks=valeur)
-        if "mois" in mot or "moi" in mot or "month" in mot: return timedelta(days=valeur * 30)
+    """Parse une durée à partir d'un texte libre.
+    Accepte aussi bien les formats compacts ("2h", "3j", "45min")
+    que les formats avec espace ("2 heures", "3 jours", "45 minutes")."""
+    if not delai_texte:
+        return timedelta(days=3)
+
+    texte = delai_texte.lower().replace("pour dans", "").replace("pour", "").strip()
+    texte = texte.replace(",", ".")
+
+    # Capture un nombre (entier ou décimal) suivi (avec ou sans espace) d'une unité alphabétique
+    matches = re.findall(r"(\d+(?:\.\d+)?)\s*([a-zéèêûî]+)", texte)
+
+    for valeur_str, unite in matches:
+        try:
+            valeur = float(valeur_str)
+        except ValueError:
+            continue
+
+        if "min" in unite or unite == "mn":
+            return timedelta(minutes=valeur)
+        if unite == "h" or "heure" in unite or "hour" in unite:
+            return timedelta(hours=valeur)
+        if "semaine" in unite or "week" in unite or unite.startswith("sem"):
+            return timedelta(weeks=valeur)
+        if "mois" in unite or "month" in unite:
+            return timedelta(days=valeur * 30)
+        if unite == "j" or "jour" in unite or "day" in unite:
+            return timedelta(days=valeur)
+
     return timedelta(days=3)
 
 missions_actives = {}
@@ -152,7 +174,7 @@ async def envoyer_double_notification(guild, msg_ticket, msg_missions, view=None
         except Exception as e:
             print(f"Erreur envoi salon validation: {e}")
     
-    await envoyer_log_proprietaire(guild._state._get_client(), f"[{guild.name}] {msg_missions}", view=VueEvaluationMissionMP if view else None, guild_target=guild, joueur_id_target=joueur_id)
+    await envoyer_log_proprietaire(bot, f"[{guild.name}] {msg_missions}", view=VueEvaluationMissionMP if view else None, guild_target=guild, joueur_id_target=joueur_id)
 
 class VueFermerTicket(discord.ui.View):
     def __init__(self):
@@ -166,11 +188,9 @@ class VueFermerTicket(discord.ui.View):
         g_id = interaction.guild.id
         if g_id in missions_actives:
             for j_id, m_info in list(missions_actives[g_id].items()):
-                if m_info.get("channel_id") == interaction.channel.id or f"📜-ordre-" in interaction.channel.name:
-                    member = interaction.guild.get_member(j_id)
-                    if member and member.name.lower() in interaction.channel.name.lower():
-                        del missions_actives[g_id][j_id]
-                        break
+                if m_info.get("channel_id") == interaction.channel.id:
+                    del missions_actives[g_id][j_id]
+                    break
 
         try: await interaction.channel.delete()
         except: pass
@@ -1013,7 +1033,7 @@ async def deverrouiller(interaction: discord.Interaction, code: str):
         await interaction.response.send_message("🔓 **Code accepté !** Valerius est désormais actif sur ce serveur.", ephemeral=True)
         await envoyer_log_proprietaire(bot, f"🔓 Déverrouillage réussi sur **{interaction.guild.name}** par {interaction.user}.")
     else:
-        await interaction.response.send_message("❌ **Code incorrect.** Le bot reste verrouillé.", ephemeral=True)
+        await interaction.response.send_message("❌ **Code incorrect.** Sale clow, va dormir.", ephemeral=True)
         await envoyer_log_proprietaire(bot, f"⚠️ Tentative de code échouée sur **{interaction.guild.name}** par {interaction.user}.")
 
 @bot.tree.command(name="changer_code", description="Change le code d'activation global du bot (Admin/Propriétaire).")
@@ -1220,11 +1240,9 @@ async def fermerticket(interaction: discord.Interaction):
     g_id = interaction.guild.id
     if g_id in missions_actives:
         for j_id, m_info in list(missions_actives[g_id].items()):
-            if m_info.get("channel_id") == interaction.channel.id or f"📜-ordre-" in interaction.channel.name:
-                member = interaction.guild.get_member(j_id)
-                if member and member.name.lower() in interaction.channel.name.lower():
-                    del missions_actives[g_id][j_id]
-                    break
+            if m_info.get("channel_id") == interaction.channel.id:
+                del missions_actives[g_id][j_id]
+                break
 
     try:
         await interaction.channel.delete(reason=f"Fermé par l'administrateur {interaction.user.name}")
