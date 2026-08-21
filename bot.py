@@ -52,7 +52,7 @@ def charger_missions_fichier(guild_id):
             if cat in structure: structure[cat].append({"texte": texte, "delai": delai})
     return structure
 
-def rÃ©Ã©crire_toutes_missions(guild_id, structure):
+def reecrire_toutes_missions(guild_id, structure):
     file_name = get_file_name(guild_id)
     with open(file_name, "w", encoding="utf-8") as f:
         for cat, liste in structure.items():
